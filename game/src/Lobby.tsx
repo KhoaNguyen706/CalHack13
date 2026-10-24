@@ -118,6 +118,9 @@ function Home() {
     );
   };
 
+  // Host-led: you pick the size, the coordinator invites people nearby until every seat is filled.
+  const startChallenge = (size: number) => run(api(`/challenges`, { agent_id: AGENT, size }));
+
   if (!agent) {
     return (
       <main className="app">
@@ -175,9 +178,20 @@ function Home() {
         </section>
       ) : (
         questions.length === 0 && (
-          <button className="primary" disabled={busy} onClick={findGroup}>
-            {busy ? 'Asking the other agents…' : 'Find my group'}
-          </button>
+          <>
+            <section className="card">
+              <p className="label">Start a challenge · how many people?</p>
+              <div className="row">
+                {[3, 4, 5].map(n => (
+                  <button key={n} className="primary" onClick={() => startChallenge(n)}>{n}</button>
+                ))}
+              </div>
+              <p className="muted">Never 2: strangers never meet one on one.</p>
+            </section>
+            <button className="secondary" disabled={busy} onClick={findGroup}>
+              {busy ? 'Asking the other agents…' : 'Find my group (testing)'}
+            </button>
+          </>
         )
       )}
 

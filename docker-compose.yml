@@ -37,6 +37,8 @@ services:
     depends_on:
       spacetime:
         condition: service_healthy
+        # A restarted spacetime publishes with a new token; restart with it, or start_round fails with 401.
+        restart: true
 
   agents:
     build: ./agents

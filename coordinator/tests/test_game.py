@@ -20,6 +20,8 @@ class FakeSpacetime:
         if self.fail:
             raise SpacetimeError("start_round: 503 down")
         self.calls.append((reducer, args))
+        if reducer != "start_round":
+            return
         mid = args["matchId"]
         self.rounds = [{"match_id": mid, "state": "playing", "answer": [1, []]}]
         self.seats = [{"match_id": mid, "agent_id": s["agent_id"], "checked_in": False} for s in args["seats"]]
@@ -88,4 +90,22 @@ def test_board_down_leaves_match_confirmed():
     client, mid = confirmed_demo_match(FakeSpacetime(fail=True))
     wait_for(lambda: "live board unavailable · round not started" in texts(client))
     assert client.get(f"/matches/{mid}").json()["state"] == "confirmed"
+    client.__exit__(None, None, None)
+
+
+def test_leaving_mid_game_drops_the_seat_then_calls_it_off(fake):
+    client, mid = confirmed_demo_match(fake)
+    wait_for(lambda: client.get(f"/matches/{mid}").json()["state"] == "playing")
+
+    left = client.post(f"/matches/{mid}/leave", json={"agent_id": "marcus"}).json()
+    assert left["state"] == "playing" and left["members"] == ["linh", "priya"]
+    assert set(left["challenge"]["round"]["keys"]) == {"linh", "priya"}
+    assert fake.calls[-1] == ("drop_seat", {"matchId": mid, "agentId": "marcus"})
+    assert client.get("/agents/marcus").json()["match_id"] is None
+
+    off = client.post(f"/matches/{mid}/leave", json={"agent_id": "linh"}).json()  # only Priya would be left
+    assert off["state"] == "cancelled"
+    assert fake.calls[-1] == ("end_round", {"matchId": mid})
+    assert all(client.get(f"/agents/{a}").json()["match_id"] is None for a in ("linh", "priya"))
+    assert client.post(f"/matches/{mid}/leave", json={"agent_id": "priya"}).status_code == 409
     client.__exit__(None, None, None)

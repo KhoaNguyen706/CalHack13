@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .broker import Broker
 from .coordinator import Conflict, Coordinator, NotFound
 from .events import EventLog
-from .models import Accept, Agent, Ask, CheckIn, Match, MatchState, NewChallenge, Question, Reply, StateChange
+from .models import Accept, Agent, Ask, CheckIn, Leave, Match, MatchState, NewChallenge, Question, Reply, StateChange
 from .spacetime import Spacetime
 from .store import Store
 
@@ -169,6 +169,16 @@ def create_app(
     @app.post("/matches/{match_id}/accept")
     async def accept(match_id: str, body: Accept) -> Match:
         return guarded(coord().accept, match_id, body)
+
+    @app.post("/matches/{match_id}/leave")
+    async def leave(match_id: str, body: Leave) -> Match:
+        """Leave the challenge at any point; see Coordinator.leave for what happens to the others."""
+        try:
+            return await coord().leave(match_id, body.agent_id)
+        except NotFound as e:
+            raise HTTPException(404, str(e))
+        except Conflict as e:
+            raise HTTPException(409, str(e))
 
     @app.put("/matches/{match_id}/challenge")
     async def put_challenge(match_id: str, body: dict) -> Match:

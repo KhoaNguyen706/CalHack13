@@ -35,6 +35,8 @@ import {
 
 // Import all reducer arg schemas
 import CheckInReducer from "./check_in_reducer";
+import DropSeatReducer from "./drop_seat_reducer";
+import EndRoundReducer from "./end_round_reducer";
 import JoinReducer from "./join_reducer";
 import StartRoundReducer from "./start_round_reducer";
 import SubmitPhotoReducer from "./submit_photo_reducer";
@@ -99,6 +101,8 @@ const tablesSchema = __schema({
 /** The schema information for all reducers in this module. This is defined the same way as the reducers would have been defined in the server, except the body of the reducer is omitted in code generation. */
 const reducersSchema = __reducers(
   __reducerSchema("check_in", CheckInReducer),
+  __reducerSchema("drop_seat", DropSeatReducer),
+  __reducerSchema("end_round", EndRoundReducer),
   __reducerSchema("join", JoinReducer),
   __reducerSchema("start_round", StartRoundReducer),
   __reducerSchema("submit_photo", SubmitPhotoReducer),

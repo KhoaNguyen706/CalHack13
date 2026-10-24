@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useReducer, useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { reducers, tables } from './module_bindings';
-import { AGENTS } from './config.ts';
+import { AGENTS, API } from './config.ts';
 
 const params = new URLSearchParams(location.search);
 const MATCH = params.get('match') ?? '';
@@ -75,6 +75,18 @@ export default function App() {
     p.catch(e => setError(String(e?.message ?? e)));
   };
 
+  // Leave at any point: the coordinator drops your seat (or calls the challenge off if too few are left).
+  const leave = async () => {
+    if (!confirm('Leave this challenge? The others carry on without you.')) return;
+    const res = await fetch(`${API}/matches/${MATCH}/leave`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_id: AGENT }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => null))?.detail ?? `couldn't leave (${res.status})`);
+    location.assign(`?agent=${AGENT}`);
+  };
+
   // Camera -> agents service (stores it, gives a link) -> the live board, which completes the round.
   const sendPhoto = async (file: File) => {
     setUploading(true);
@@ -100,7 +112,7 @@ export default function App() {
     <Shell>
       <header>
         <h1>Krew</h1>
-        {round.state !== 'done' && minutesLeft !== undefined && <span className="pill">{minutesLeft} min left</span>}
+        {!['done', 'cancelled'].includes(round.state) && minutesLeft !== undefined && <span className="pill">{minutesLeft} min left</span>}
       </header>
 
       {myKey ? (
@@ -157,6 +169,14 @@ export default function App() {
         </section>
       )}
 
+      {round.state === 'cancelled' && (
+        <section className="card">
+          <p className="big">This challenge was called off</p>
+          <p className="muted">Too few people were left to finish it. Your agent can find you a new one.</p>
+          <a className="pill" href={`?agent=${AGENT}`}>Back to your agent</a>
+        </section>
+      )}
+
       {round.state === 'done' && (
         <section className="card done">
           <p className="big">Challenge complete!</p>
@@ -164,6 +184,11 @@ export default function App() {
           {photos[0] && <img src={photos[0].url} alt="Group photo" />}
         </section>
       )}
+
+      {['playing', 'unlocked'].includes(round.state) && (
+        <button className="link" onClick={() => run(leave())}>Leave challenge</button>
+      )}
+      {round.state === 'done' && <a className="pill" href={`?agent=${AGENT}`}>Back to your agent</a>}
 
       {error && <p className="error">{error}</p>}
     </Shell>

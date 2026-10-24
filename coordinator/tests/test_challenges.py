@@ -192,3 +192,14 @@ def test_pick_invitees_validates_claude():
     assert good == (["a3", "a0"], "mix", "claude")
     bad = asyncio.run(pick_invitees(ranked, [agents["h"]], 2, agents, fake(InvitePick(invite=["zz"], reason="?"))))
     assert bad[2] == "rules" and bad[0] == [c.agent_id for c in ranked[:2]]
+
+
+def test_leaving_before_the_start_reopens_the_seat(client):
+    client.post("/demo/seed")
+    mid = client.post("/challenges", json={"agent_id": "linh", "size": 3}).json()["match_id"]
+    full = state(client, mid, "pending")
+    leaver = full["members"][1]
+    client.post(f"/matches/{mid}/accept", json={"agent_id": leaver})
+    after = client.post(f"/matches/{mid}/leave", json={"agent_id": leaver}).json()
+    assert after["state"] == "inviting" and leaver not in after["members"] and leaver in after["declined"]
+    assert client.post(f"/matches/{mid}/leave", json={"agent_id": "nobody"}).status_code == 409

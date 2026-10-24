@@ -90,6 +90,25 @@ describe('three-key round', () => {
     expect(test.db.photo.matchId.find('m1')?.url).toBe('https://x.test/p.jpg');
   });
 
+  it('a player who leaves loses their seat; the rest can still unlock the photo', () => {
+    const test = started();
+    joinAll(test);
+    test.withReducerTx(linh, ctx => game.check_in(ctx, { matchId: 'm1' }));
+    test.withReducerTx(marcus, ctx => game.check_in(ctx, { matchId: 'm1' }));
+    expect(() => test.withReducerTx(stranger, ctx => game.drop_seat(ctx, { matchId: 'm1', agentId: 'priya' }))).toThrow('only the coordinator');
+    test.withReducerTx(coord, ctx => game.drop_seat(ctx, { matchId: 'm1', agentId: 'priya' }));
+    expect([...test.db.seat.matchId.filter('m1')].map(s => s.agentId).sort()).toEqual(['linh', 'marcus']);
+    expect(test.db.seatKey.seatId.find('m1:priya')).toBeNull();
+    expect(round(test)?.state).toBe('unlocked');
+  });
+
+  it('the coordinator can call a round off', () => {
+    const test = started();
+    expect(() => test.withReducerTx(stranger, ctx => game.end_round(ctx, { matchId: 'm1' }))).toThrow('only the coordinator');
+    test.withReducerTx(coord, ctx => game.end_round(ctx, { matchId: 'm1' }));
+    expect(round(test)?.state).toBe('cancelled');
+  });
+
   it('restarting a round clears seats, check-ins and the photo', () => {
     const test = started();
     joinAll(test);

@@ -7,11 +7,15 @@ import { type Infer as __Infer } from "spacetimedb";
 
 // Import all reducer arg schemas
 import CheckInReducer from "../check_in_reducer";
+import DropSeatReducer from "../drop_seat_reducer";
+import EndRoundReducer from "../end_round_reducer";
 import JoinReducer from "../join_reducer";
 import StartRoundReducer from "../start_round_reducer";
 import SubmitPhotoReducer from "../submit_photo_reducer";
 
 export type CheckInParams = __Infer<typeof CheckInReducer>;
+export type DropSeatParams = __Infer<typeof DropSeatReducer>;
+export type EndRoundParams = __Infer<typeof EndRoundReducer>;
 export type JoinParams = __Infer<typeof JoinReducer>;
 export type StartRoundParams = __Infer<typeof StartRoundReducer>;
 export type SubmitPhotoParams = __Infer<typeof SubmitPhotoReducer>;

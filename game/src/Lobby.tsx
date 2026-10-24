@@ -203,6 +203,15 @@ function Chat({ agentId }: { agentId: string }) {
             </div>
           )}
           {m.state === 'confirmed' && <p className="muted">Everyone's in. Your agent is setting up the challenge…</p>}
+          {/* The host's way out before the start is Call it off; an invitation still waiting has Not now. */}
+          {!status.needs_accept && !(status.is_host && ['inviting', 'pending'].includes(m.state)) && (
+            <button
+              className="link"
+              onClick={() => confirm('Leave this challenge?') && run(call(API, `/matches/${m.match_id}/leave`, { agent_id: agentId }))}
+            >
+              Leave challenge
+            </button>
+          )}
         </section>
       )}
 

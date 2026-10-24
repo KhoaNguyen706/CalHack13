@@ -2,7 +2,8 @@
 //
 // The coordinator (Python) starts a round with start_round once a group is confirmed.
 // Phones join a seat, read their own key through the my_key view, tap check_in, and
-// submit the group photo. Round state: playing -> unlocked (all checked in) -> done (photo).
+// submit the group photo. Round state: playing -> unlocked (all checked in) -> done (photo), or cancelled
+// when the coordinator calls it off (someone left and too few are left).
 import { schema, t, table, SenderError, type InferSchema, type ReducerCtx } from 'spacetimedb/server';
 
 const round = table(
@@ -95,6 +96,31 @@ export const start_round = spacetimedb.reducer(
     }
   }
 );
+
+function onlyCoordinator(ctx: Ctx) {
+  if (!ctx.db.coordinator.identity.find(ctx.sender)) throw new SenderError('only the coordinator changes rounds');
+}
+
+// Coordinator only: a player left the challenge. Their seat goes; if everyone still here has checked in, the
+// photo step unlocks for them.
+export const drop_seat = spacetimedb.reducer({ matchId: t.string(), agentId: t.string() }, (ctx, { matchId, agentId }) => {
+  onlyCoordinator(ctx);
+  const r = playingRound(ctx, matchId);
+  const seatId = seatIdOf(matchId, agentId);
+  ctx.db.seatKey.seatId.delete(seatId);
+  ctx.db.seat.seatId.delete(seatId);
+  const left = [...ctx.db.seat.matchId.filter(matchId)];
+  if (r.state === 'playing' && left.length > 0 && left.every(o => o.checkedIn)) {
+    ctx.db.round.matchId.update({ ...r, state: 'unlocked' });
+  }
+});
+
+// Coordinator only: the challenge was called off. Phones show it and send everyone back to their agent.
+export const end_round = spacetimedb.reducer({ matchId: t.string() }, (ctx, { matchId }) => {
+  onlyCoordinator(ctx);
+  const r = playingRound(ctx, matchId);
+  if (r.state !== 'done') ctx.db.round.matchId.update({ ...r, state: 'cancelled' });
+});
 
 // A phone claims its person's seat. First claim wins; the same phone can rejoin.
 export const join = spacetimedb.reducer({ matchId: t.string(), agentId: t.string() }, (ctx, { matchId, agentId }) => {

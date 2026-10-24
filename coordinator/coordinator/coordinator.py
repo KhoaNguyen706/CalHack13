@@ -419,6 +419,53 @@ class Coordinator:
         self._spawn(self.design_challenge(match))
         return match
 
+    async def leave(self, match_id: str, agent_id: str) -> Match:
+        """Someone leaves the challenge. Before it starts: like declining (seat reopens; the host leaving calls it
+        off). Once it's confirmed or playing: their seat goes and the rest carry on, unless fewer than MIN_GROUP
+        are left, which calls it off for everyone."""
+        match = self.match(match_id)
+        if agent_id not in match.members:
+            raise Conflict(f"{agent_id} is not in match {match_id}")
+        if match.state in (MatchState.inviting, MatchState.pending):
+            return self.accept(match_id, Accept(agent_id=agent_id, accept=False))
+        if match.state not in (MatchState.confirmed, MatchState.playing):
+            raise Conflict(f"match is {match.state.value}; there's nothing to leave")
+
+        playing = match.state == MatchState.playing
+        rest = [m for m in match.members if m != agent_id]
+        if len(rest) < MIN_GROUP:
+            match = self._save_state(match, MatchState.cancelled)
+            self._release(match)
+            self.events.emit(
+                "approval", f"{name(agent_id)} left · challenge called off, everyone back in the pool", match_id=match_id
+            )
+            if playing:
+                await self._board("end_round", {"matchId": match_id})
+            return match
+
+        update: dict = {"members": rest, "accepted": [m for m in match.accepted if m != agent_id], "size": len(rest)}
+        if match.challenge:
+            rnd = match.challenge.get("round") or {}
+            keys = {m: k for m, k in (rnd.get("keys") or {}).items() if m != agent_id}
+            update["challenge"] = {**match.challenge, "group": rest, "round": {**rnd, "keys": keys}}
+        match = self.store.save_match(match.model_copy(update=update))
+        self._release(match, [agent_id])
+        self.events.emit(
+            "approval", f"{name(agent_id)} left · {len(rest)} carry on", match_id=match_id, host=match.host, left=agent_id
+        )
+        if playing:
+            await self._board("drop_seat", {"matchId": match_id, "agentId": agent_id})
+        return match
+
+    async def _board(self, reducer: str, args: dict) -> None:
+        """A change to the live board that the coordinator's own state already reflects; a failure only logs."""
+        if self.spacetime is None:
+            return
+        try:
+            await self.spacetime.call(reducer, args)
+        except (httpx.HTTPError, SpacetimeError) as e:
+            log.warning("%s failed: %s", reducer, e)
+
     def set_state(self, match_id: str, state: MatchState) -> Match:
         match = self.match(match_id)
         if NEXT_STATE.get(match.state) != state:
@@ -468,6 +515,9 @@ class Coordinator:
         if match.state not in (MatchState.confirmed, MatchState.playing):
             raise Conflict(f"match is {match.state.value}; challenges attach to confirmed groups")
         keys = (challenge.get("round") or {}).get("keys") or {}
+        if set(keys) > set(match.members):  # someone left while it was being designed: drop their part
+            keys = {m: k for m, k in keys.items() if m in match.members}
+            challenge = {**challenge, "group": match.members, "round": {**challenge["round"], "keys": keys}}
         if set(keys) != set(match.members):
             raise ValueError("challenge.round.keys must have exactly one key per member")
         match = self.store.save_match(match.model_copy(update={"challenge": challenge}))

@@ -162,6 +162,12 @@ class Accept(BaseModel):
     accept: bool = True
 
 
+class Leave(BaseModel):
+    """POST /matches/{id}/leave"""
+
+    agent_id: str
+
+
 class StateChange(BaseModel):
     """POST /matches/{id}/state, used by the game page."""
 

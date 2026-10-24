@@ -48,3 +48,39 @@ then submit a photo URL. The coordinator log ends with `challenge complete!`.
 - Phones on the same Wi-Fi: `SPACETIME_PUBLIC_WS=ws://<laptop-ip>:3000 docker compose up`, then open `http://<laptop-ip>:5173/...`.
 - Fresh start: `docker compose down -v`.
 - Code changes need a rebuild: `docker compose up --build`.
+
+## Deploy (Maincloud + Railway + Vercel)
+
+**1. SpacetimeDB on Maincloud.** Install the CLI (Windows PowerShell: `iwr https://windows.spacetimedb.com -useb | iex`), then:
+
+```bash
+spacetime login                      # GitHub sign-in in the browser
+cd game && npm run spacetime:publish # publishes "threekey" to maincloud
+spacetime login show --token         # copy: the coordinator needs it to start rounds
+```
+
+**2. Coordinator on Railway.** New project → Deploy from GitHub repo → root directory `coordinator`
+(it builds the Dockerfile). Add a volume mounted at `/data`, generate a public domain, and set:
+
+| Variable | Value |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | the team key (never commit it) |
+| `SPACETIME_URL` | `https://maincloud.spacetimedb.com` |
+| `SPACETIME_DB` | `threekey` |
+| `SPACETIME_TOKEN` | output of `spacetime login show --token` |
+| `COORDINATOR_DB` | `/data/coordinator.db` |
+| `GROUP_SIZE` | `3` for the real demo, `2` to test with two people |
+
+Check `https://<railway-domain>/health` shows `"claude": true, "spacetime": true`. Run one instance only:
+open questions live in memory.
+
+**3. Web app on Vercel.** New project → import the repo → root directory `game` (Vite is detected). Set before the
+first build (Vite bakes them in; redeploy after changing them):
+
+| Variable | Value |
+| --- | --- |
+| `VITE_COORDINATOR_URL` | `https://<railway-domain>` |
+| `VITE_SPACETIMEDB_HOST` | `wss://maincloud.spacetimedb.com` |
+| `VITE_SPACETIMEDB_DB_NAME` | `threekey` |
+
+Open `https://<vercel-domain>` on phones; the live agents screen is `https://<vercel-domain>/?view=log`.

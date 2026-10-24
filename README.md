@@ -6,6 +6,7 @@ cooperative challenge they can only win together. Design: `Cal Hacks 13 — AI C
 | Folder | What |
 | --- | --- |
 | `coordinator/` | Python coordinator: gateway, broker, matching, approval, negotiation log, MCP adapter |
+| `agents/` | Personal agents (yes / no / counter) and the Claude challenge designer |
 | `game/` | SpacetimeDB live game (module + phone game page) |
 
 ## Run everything (any OS, Docker)
@@ -20,13 +21,14 @@ docker compose up --build
 | --- | --- |
 | Coordinator API | http://localhost:8000/docs |
 | Negotiation log | `ws://localhost:8000/ws/log` (or `GET /log`) |
+| Agents API | http://localhost:8100/docs |
 | Game page | http://localhost:5173/?match=&lt;match_id&gt;&agent=&lt;agent_id&gt; |
 | SpacetimeDB | http://localhost:3000 |
 
 Try the demo:
 
 ```bash
-curl -X POST localhost:8000/demo/seed
+curl -X POST localhost:8100/personas/checkin-all  # live persona agents (or localhost:8000/demo/seed: auto-yes)
 curl -X POST localhost:8000/matching/run          # note the match_id of linh/marcus/priya
 curl -X POST localhost:8000/matches/<id>/accept -H 'Content-Type: application/json' -d '{"agent_id":"linh"}'
 #  …same for marcus and priya → round goes live

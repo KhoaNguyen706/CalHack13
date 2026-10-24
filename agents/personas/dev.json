@@ -1,0 +1,16 @@
+{
+  "agent_id": "dev",
+  "free": "Tue 16:00-18:00",
+  "interests": [
+    "transfer",
+    "basketball"
+  ],
+  "skills": [
+    "trivia"
+  ],
+  "group_pref": "small",
+  "area": "SJSU",
+  "open_to_invites": true,
+  "style": "Plays pickup basketball after; keeps plans short.",
+  "max_minutes": 90
+}

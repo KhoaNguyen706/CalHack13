@@ -1,0 +1,15 @@
+{
+  "agent_id": "carmen",
+  "free": "Mon 12:00-15:00",
+  "interests": [
+    "transfer",
+    "photography"
+  ],
+  "skills": [
+    "camera"
+  ],
+  "group_pref": "any",
+  "area": "SJSU",
+  "open_to_invites": true,
+  "style": "Flexible; likes taking photos of new places."
+}

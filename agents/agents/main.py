@@ -1,6 +1,8 @@
 """HTTP surface of the agents service. Run: uvicorn agents.main:app --port 8100 --reload"""
 
 import asyncio
+import base64
+import binascii
 import json
 import logging
 from contextlib import asynccontextmanager
@@ -8,7 +10,7 @@ from pathlib import Path
 
 import anthropic
 import httpx
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
@@ -16,10 +18,13 @@ from . import chat, llm, sponsors, timeutil
 from .config import Settings
 from .coordinator_client import CoordinatorClient, CoordinatorError
 from .memory import Memory
-from .models import Answer, ChatIn, ChatLine, Decision, Feedback, Login, PersonalContext, PhotoCheck, Question, Start
+from .models import Answer, ChatIn, ChatLine, Decision, Feedback, Login, PersonalContext, PhotoCheck, PhotoUpload, Question, Start
 from .place import Place, PlaceService
 from .service import AgentsService, Conflict, NotFound
 from .store import Store
+
+# The group photo's first bytes say what it is; anything else is refused.
+PHOTO_TYPES = ((b"\xff\xd8\xff", "image/jpeg"), (b"\x89PNG", "image/png"), (b"RIFF", "image/webp"))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 SEEDS = Path(__file__).parent.parent / "seeds" / "personal_contexts.json"
@@ -144,6 +149,28 @@ def create_app(
             user.transcript.append(ChatLine(role="agent", text=text))
             svc().store.save_user(user)
         return {"reply": text, **(await svc().status(user))}
+
+    # --- photos: the game page uploads the group photo here, then puts its link on the board -------
+
+    @app.post("/photos")
+    async def upload_photo(body: PhotoUpload) -> dict:
+        """Returns the photo's path on this service; the page turns it into a full link."""
+        try:
+            data = base64.b64decode(body.image_base64, validate=True)
+        except (binascii.Error, ValueError):
+            raise HTTPException(422, "image_base64 is not valid base64")
+        media_type = next((t for magic, t in PHOTO_TYPES if data.startswith(magic)), None)
+        if media_type is None:
+            raise HTTPException(422, "send a JPEG, PNG or WebP photo")
+        photo_id = svc().store.save_photo(body.match_id, body.agent_id, media_type, data)
+        return {"id": photo_id, "path": f"/photos/{photo_id}"}
+
+    @app.get("/photos/{photo_id}")
+    async def get_photo(photo_id: str) -> Response:
+        found = svc().store.photo(photo_id)
+        if found is None:
+            raise HTTPException(404, "unknown photo")
+        return Response(found[1], media_type=found[0], headers={"Cache-Control": "public, max-age=86400"})
 
     # --- challenges: photo checks --------------------------------------------------
 

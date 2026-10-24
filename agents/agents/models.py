@@ -123,6 +123,14 @@ class Decision(BaseModel):
     accept: bool = True
 
 
+class PhotoUpload(BaseModel):
+    """POST /photos: the group photo straight from the phone's camera, as base64 (the page shrinks it first)."""
+
+    match_id: str = Field(min_length=1, max_length=64)
+    agent_id: str | None = None
+    image_base64: str = Field(min_length=1, max_length=6_000_000)
+
+
 class PhotoCheck(BaseModel):
     """One photo for one step of a challenge. Send a public URL (uploaded to storage) or the image itself."""
 

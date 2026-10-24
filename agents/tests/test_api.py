@@ -1,3 +1,4 @@
+import base64
 import json
 import re
 import time
@@ -242,3 +243,14 @@ def test_chat_without_claude_points_to_start(client):
 def test_place_builtin_without_apify(client):
     place = client.get("/place").json()
     assert not place["scraped"] and "Palace of Fine Arts" in place["facts"][0]["text"] and place["images"] == []
+
+
+def test_group_photo_upload_and_serve(client):
+    jpeg = b"\xff\xd8\xff\xe0" + b"photo bytes"
+    body = {"match_id": "m1", "agent_id": "phong", "image_base64": base64.b64encode(jpeg).decode()}
+    up = client.post("/photos", json=body).json()
+    got = client.get(up["path"])
+    assert got.status_code == 200 and got.content == jpeg and got.headers["content-type"] == "image/jpeg"
+    bad = {"match_id": "m1", "image_base64": base64.b64encode(b"not an image").decode()}
+    assert client.post("/photos", json=bad).status_code == 422
+    assert client.get("/photos/nope").status_code == 404

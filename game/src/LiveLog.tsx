@@ -2,9 +2,7 @@
 // Draws the coordinator's live event stream (ws /ws/log): agents around the coordinator, questions going
 // out, answers coming back, groups forming and checking in. Open it in a third window while two people play.
 import { useEffect, useRef, useState } from 'react';
-
-// Same address as the page (Vite proxies /api), unless a deploy points elsewhere.
-const API = import.meta.env.VITE_COORDINATOR_URL || `${location.origin}/api`;
+import { API } from './config.ts';
 
 type LogEvent = { seq: number; ts: number; kind: string; text: string; data: Record<string, any> };
 type Status = 'pool' | 'asked' | 'yes' | 'no' | 'grouped' | 'accepted' | 'here' | 'done';

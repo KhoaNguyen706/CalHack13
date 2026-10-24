@@ -23,6 +23,10 @@ class Store:
             "CREATE TABLE IF NOT EXISTS photo_checks (match_id TEXT NOT NULL, step TEXT NOT NULL, passed INTEGER NOT NULL,"
             " reason TEXT NOT NULL, agent_id TEXT, ts REAL NOT NULL, PRIMARY KEY (match_id, step))"
         )
+        self.db.execute(
+            "CREATE TABLE IF NOT EXISTS photos (id TEXT PRIMARY KEY, match_id TEXT NOT NULL, agent_id TEXT,"
+            " media_type TEXT NOT NULL, data BLOB NOT NULL, ts REAL NOT NULL)"
+        )
         self.users = {r[0]: User.model_validate_json(r[1]) for r in self.db.execute("SELECT id, body FROM users")}
 
     # --- users -------------------------------------------------------------------
@@ -53,6 +57,21 @@ class Store:
             "SELECT text FROM memories WHERE agent_id = ? ORDER BY ts DESC LIMIT ?", (agent_id, n)
         )
         return [r[0] for r in rows]
+
+    # --- photos (the group photo the game page uploads) --------------------------
+
+    def save_photo(self, match_id: str, agent_id: str | None, media_type: str, data: bytes) -> str:
+        photo_id = uuid.uuid4().hex
+        self.db.execute(
+            "INSERT INTO photos (id, match_id, agent_id, media_type, data, ts) VALUES (?, ?, ?, ?, ?, ?)",
+            (photo_id, match_id, agent_id, media_type, data, time.time()),
+        )
+        self.db.commit()
+        return photo_id
+
+    def photo(self, photo_id: str) -> tuple[str, bytes] | None:
+        row = self.db.execute("SELECT media_type, data FROM photos WHERE id = ?", (photo_id,)).fetchone()
+        return (row[0], row[1]) if row else None
 
     # --- photo checks ------------------------------------------------------------
 

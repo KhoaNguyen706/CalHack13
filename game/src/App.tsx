@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useReducer, useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { reducers, tables } from './module_bindings';
+import { AGENTS } from './config.ts';
 
 const params = new URLSearchParams(location.search);
 const MATCH = params.get('match') ?? '';
@@ -12,6 +13,23 @@ const ROLE_LABEL: Record<string, string> = { riddles: 'Key 1 · riddles', map: '
 
 function title(id: string) {
   return id.charAt(0).toUpperCase() + id.slice(1);
+}
+
+// Shrink the camera photo (max 1280 px, JPEG) so it uploads fast on mobile data. Returns base64 without the prefix.
+async function shrink(file: File): Promise<string> {
+  const img = new Image();
+  img.src = URL.createObjectURL(file);
+  try {
+    await img.decode();
+    const scale = Math.min(1, 1280 / Math.max(img.naturalWidth, img.naturalHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(img.naturalWidth * scale);
+    canvas.height = Math.round(img.naturalHeight * scale);
+    canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.82).split(',')[1];
+  } finally {
+    URL.revokeObjectURL(img.src);
+  }
 }
 
 function useMinutesLeft(startedAtMs: number | undefined, timerMin: number | undefined) {
@@ -36,7 +54,8 @@ export default function App() {
   const [myKeys] = useTable(tables.myKey);
 
   const [error, setError] = useState('');
-  const [photoUrl, setPhotoUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const camera = useRef<HTMLInputElement>(null);
   const joined = useRef(false);
 
   const round = rounds[0];
@@ -54,6 +73,23 @@ export default function App() {
   const run = (p: Promise<unknown>) => {
     setError('');
     p.catch(e => setError(String(e?.message ?? e)));
+  };
+
+  // Camera -> agents service (stores it, gives a link) -> the live board, which completes the round.
+  const sendPhoto = async (file: File) => {
+    setUploading(true);
+    try {
+      const res = await fetch(`${AGENTS}/photos`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ match_id: MATCH, agent_id: AGENT, image_base64: await shrink(file) }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.detail ?? `upload failed (${res.status})`);
+      const { path } = await res.json();
+      await submitPhoto({ matchId: MATCH, url: AGENTS + path });
+    } finally {
+      setUploading(false);
+    }
   };
 
   if (!MATCH || !AGENT) return <Shell><p>Open the game link from your match page.</p></Shell>;
@@ -100,23 +136,25 @@ export default function App() {
       )}
 
       {round.state === 'unlocked' && (
-        <form
-          className="card"
-          onSubmit={e => {
-            e.preventDefault();
-            run(submitPhoto({ matchId: MATCH, url: photoUrl.trim() }));
-          }}
-        >
+        <section className="card">
           <p className="label">Everyone's here! Take the group photo</p>
+          {/* capture opens the camera straight away on phones (front camera: everyone in the shot) */}
           <input
-            type="url"
-            placeholder="https://… photo link"
-            value={photoUrl}
-            onChange={e => setPhotoUrl(e.target.value)}
-            required
+            ref={camera}
+            type="file"
+            accept="image/*"
+            capture="user"
+            hidden
+            onChange={e => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (file) run(sendPhoto(file));
+            }}
           />
-          <button className="primary" type="submit">Submit photo</button>
-        </form>
+          <button className="primary" disabled={uploading} onClick={() => camera.current?.click()}>
+            {uploading ? 'Sending the photo…' : '📸 Take the group photo'}
+          </button>
+        </section>
       )}
 
       {round.state === 'done' && (

@@ -2,10 +2,8 @@
 // Your agent checks you in, answers the coordinator's invitations for you, and you approve every step here.
 // Each window keeps its own agent in the URL, so two windows on one laptop are two different people.
 import { useEffect, useRef, useState } from 'react';
-
-// Same address as the page (Vite proxies these), unless a deploy points elsewhere.
-const AGENTS = import.meta.env.VITE_AGENTS_URL || `${location.origin}/agents-api`;
-const API = import.meta.env.VITE_COORDINATOR_URL || `${location.origin}/api`;
+import { AGENTS, API } from './config.ts';
+import InstallHint from './InstallHint.tsx';
 const SIZES = [2, 3, 4, 5];
 const KEY = 'threekey-agent';
 
@@ -78,6 +76,7 @@ function Login() {
   return (
     <main className="app">
       <h1>Meet your agent</h1>
+      <InstallHint />
       <p className="muted">
         Your personal AI agent finds a small group nearby for a quick challenge. It only shares your rough free time
         and interests, and you approve every step.
@@ -160,6 +159,8 @@ function Chat({ agentId }: { agentId: string }) {
           <button className="pill" onClick={switchPerson}>switch person</button>
         </span>
       </header>
+
+      <InstallHint />
 
       <section className="transcript">
         {status.transcript.map((line, i) => (

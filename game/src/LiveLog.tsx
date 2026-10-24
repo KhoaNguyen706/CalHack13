@@ -5,6 +5,7 @@
 // - /?view=log (a presenter screen): everyone, from the full event stream (ws /ws/log).
 import { useEffect, useRef, useState } from 'react';
 import { API } from './config.ts';
+import { Icon } from './ui.tsx';
 
 type LogEvent = { seq: number; ts: number; kind: string; text: string; data: Record<string, any> };
 type Status = 'pool' | 'asked' | 'yes' | 'no' | 'grouped' | 'accepted' | 'here' | 'done';
@@ -21,7 +22,8 @@ const STATUS_LABEL: Record<Status, string> = {
   pool: 'in the pool', asked: 'asked', yes: 'said yes', no: 'said no', grouped: 'in a group',
   accepted: 'accepted', here: "here ✓", done: 'done 🎉',
 };
-const SIZE = 440, MID = SIZE / 2, RING = 160;
+// Room for ~20 agents on the ring before their names collide.
+const SIZE = 600, MID = SIZE / 2, RING = 236;
 
 // Back to the chat of the person who opened this screen: their agent comes in the link (each window is its own
 // person), else the one this browser remembers (the lobby's key). Without either, back to sign-in.
@@ -93,7 +95,7 @@ export default function LiveLog() {
   const [pulses, setPulses] = useState<Pulse[]>([]);
   const [online, setOnline] = useState(false);
   const [labels, setLabels] = useState<Record<string, string>>({});
-  const feedEnd = useRef<HTMLDivElement>(null);
+  const feedBox = useRef<HTMLElement>(null);
 
   const animate = (fresh: Pulse[]) => {
     if (!fresh.length) return;
@@ -175,8 +177,10 @@ export default function LiveLog() {
     };
   }, []);
 
+  // Keep the newest line in view by scrolling the log box itself, not the whole page (it jumps on phones).
   useEffect(() => {
-    feedEnd.current?.scrollIntoView({ block: 'end' });
+    const box = feedBox.current;
+    if (box) box.scrollTop = box.scrollHeight;
   }, [feed]);
 
   const ids = Object.keys(board.agents);
@@ -189,16 +193,18 @@ export default function LiveLog() {
 
   return (
     <main className="app wide">
-      <header>
-        <h1>{ME ? 'Your group, live' : 'Agents, live'}</h1>
-        <span className="row">
-          <a className="pill" href={backHref()}>← back</a>
-          <span className={`pill ${online ? 'live' : ''}`}>{online ? '● live' : 'reconnecting…'}</span>
-        </span>
+      <header className="log-top">
+        <div className="brand">
+          <a className="icon-btn" href={backHref()} aria-label="Back to your agent"><Icon name="back" size={22} /></a>
+          <Icon name="live" size={40} />
+          <h1>{ME ? 'Your group, live' : 'Negotiation log'}</h1>
+          <span className={`live-pill${online ? ' on' : ''}`}>{online ? 'live' : 'reconnecting…'}</span>
+        </div>
+        <span className="muted">Every line runs through the Coordinator</span>
       </header>
 
-      <div className="split">
-        <section className="card">
+      <div className="log-split">
+        <section className="card violet">
           <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="net" role="img" aria-label="Agents around the coordinator">
             {ids.map(id => {
               const p = pos(id);
@@ -236,14 +242,13 @@ export default function LiveLog() {
           {board.reason && <p className="muted"><b>Why this group:</b> {board.reason}</p>}
         </section>
 
-        <section className="card feed">
-          <p className="label">Negotiation log</p>
+        <section className="card feed" ref={feedBox}>
+          {feed.length === 0 && <p className="muted">Waiting for the first agent…</p>}
           {feed.map(e => (
             <p key={e.seq} className="event">
-              <span className={`tag ${e.kind}`}>{e.kind}</span> {e.text}
+              <span className={`tag ${e.kind}`}>[{e.kind}]</span><span>{e.text}</span>
             </p>
           ))}
-          <div ref={feedEnd} />
         </section>
       </div>
     </main>

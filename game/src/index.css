@@ -1,222 +1,1453 @@
+/* Krew design system: dark by default (glows pop at night), light follows the phone's setting (flat fills and
+   higher contrast for sunlight). Teal is you, violet is the Coordinator, green / amber / grey are answers. */
 :root {
-  --bg: #f6f7f9;
-  --card: #ffffff;
-  --text: #15171a;
-  --muted: #5f6670;
-  --accent: #2f6fed;
-  --accent-text: #ffffff;
-  --ok: #1f9d55;
-  --border: #e3e6ea;
-  --error: #c62828;
-  color-scheme: light dark;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: dark;
+  --bg: #07070a;
+  --card: #0d0d11;
+  --field: #14141a;
+  --paper: #14141a;
+  --border: #2a2a31;
+  --text: #f4f4f5;
+  --title: #ffffff;
+  --muted: #a9a9b3;
+  --sec: #5a5a66;
+  --chip-border: #4a4a55;
+  --dots: rgba(45, 212, 191, 0.08);
+
+  --teal: #2dd4bf;
+  --teal-2: #25ae9d;
+  --teal-3: #1e8c7e;
+  --accent: #2dd4bf;
+  --accent-ink: #04201c;
+  --accent-text: #2dd4bf;
+  --accent-line: rgba(45, 212, 191, 0.5);
+  --accent-soft: rgba(45, 212, 191, 0.18);
+  --card-glow: 0 0 36px -18px rgba(45, 212, 191, 0.5);
+  --avatar-bg: #0f1f1e;
+
+  --violet: #a78bfa;
+  --violet-line: rgba(167, 139, 250, 0.5);
+  --violet-soft: rgba(167, 139, 250, 0.14);
+  --violet-glow: 0 0 36px -18px rgba(167, 139, 250, 0.55);
+
+  --green: #4ade80;
+  --green-text: #4ade80;
+  --green-fill: rgba(74, 222, 128, 0.13);
+  --green-solid: rgba(74, 222, 128, 0.33);
+  --amber: #fbbf24;
+  --amber-text: #fbbf24;
+  --amber-soft: rgba(251, 191, 36, 0.12);
+  --grey: #8b8b95;
+  --grey-text: #a9a9b3;
+  --badge-ink: #07210f;
+  --teal-fill: rgba(45, 212, 191, 0.19);
+  --star: #fbbf24;
+  --danger: #fca5a5;
+  --glow: 1;
+  --tag-coordinator: #94a3b8;
+  --tag-broker: #7dd3fc;
+  --tag-approval: #a5b4fc;
+  --tag-challenge: #5eead4;
+
+  --display: 'Space Grotesk', system-ui, sans-serif;
+  --body: 'DM Sans', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
+@media (prefers-color-scheme: light) {
   :root {
-    --bg: #111316;
-    --card: #1b1e23;
-    --text: #eef0f3;
-    --muted: #9aa3ad;
-    --accent: #5b8cff;
-    --ok: #3ccf7f;
-    --border: #2a2f36;
-    --error: #ff6b6b;
+    color-scheme: light;
+    --bg: #f3f6f5;
+    --card: #ffffff;
+    --field: #f3f6f5;
+    --paper: #ffffff;
+    --border: #c9d4d2;
+    --text: #0b1f1e;
+    --title: #06201e;
+    --muted: #465c59;
+    --sec: #6b7e7b;
+    --chip-border: #6b7e7b;
+    --dots: transparent;
+
+    --teal: #0f766e;
+    --teal-2: #0c615a;
+    --teal-3: #0a4e49;
+    --accent: #0f766e;
+    --accent-ink: #ffffff;
+    --accent-text: #0f766e;
+    --accent-line: rgba(15, 118, 110, 0.55);
+    --accent-soft: rgba(15, 118, 110, 0.14);
+    --card-glow: 0 6px 22px -14px rgba(15, 118, 110, 0.45);
+    --avatar-bg: #e3f3f0;
+
+    --violet: #6d28d9;
+    --violet-line: rgba(109, 40, 217, 0.5);
+    --violet-soft: rgba(109, 40, 217, 0.1);
+    --violet-glow: 0 6px 22px -14px rgba(109, 40, 217, 0.4);
+
+    --green: #15803d;
+    --green-text: #15803d;
+    --green-fill: rgba(21, 128, 61, 0.13);
+    --green-solid: rgba(21, 128, 61, 0.33);
+    --amber: #b45309;
+    --amber-text: #92400e;
+    --amber-soft: rgba(180, 83, 9, 0.1);
+    --grey: #5f6b7a;
+    --grey-text: #465c59;
+    --badge-ink: #ffffff;
+    --teal-fill: rgba(15, 118, 110, 0.19);
+    --star: #d97706;
+    --danger: #b91c1c;
+    --glow: 0;
+    --tag-coordinator: #475569;
+    --tag-broker: #0369a1;
+    --tag-approval: #4338ca;
+    --tag-challenge: #0f766e;
   }
 }
 
 * {
   box-sizing: border-box;
+}
+
+html,
+body {
   margin: 0;
+  background-color: var(--bg);
 }
 
 body {
-  background: var(--bg);
+  background-image: radial-gradient(var(--dots) 1px, transparent 1px);
+  background-size: 22px 22px;
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.4;
   color: var(--text);
+  -webkit-font-smoothing: antialiased;
 }
 
-.app {
-  max-width: 480px;
-  margin: 0 auto;
-  padding: 20px 16px 40px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+h1,
+h2,
+h3,
+p {
+  margin: 0;
 }
 
-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+h1,
+h2 {
+  font-family: var(--display);
+  font-weight: 700;
+  color: var(--title);
+  line-height: 1.15;
 }
 
-h1 {
-  font-size: 1.4rem;
+h2 {
+  font-size: 26px;
 }
 
-.pill {
-  font-size: 0.85rem;
-  padding: 4px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--muted);
+button,
+input {
+  font: inherit;
+  color: inherit;
 }
 
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+a {
+  color: var(--accent-text);
+  text-decoration: none;
 }
 
-.key {
-  border-color: var(--accent);
-}
-
-.label {
-  font-size: 0.8rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
-}
-
-.big {
-  font-size: 1.3rem;
-  font-weight: 600;
-  line-height: 1.35;
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+summary:focus-visible {
+  outline: 3px solid #38bdf8;
+  outline-offset: 2px;
 }
 
 .muted {
   color: var(--muted);
 }
 
-.board {
+.small {
+  font-size: 14px;
+}
+
+.center {
+  text-align: center;
+}
+
+/* --- Layout --------------------------------------------------------------- */
+
+.app {
+  max-width: 480px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: max(18px, env(safe-area-inset-top)) 16px max(20px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.app.wide {
+  max-width: 1280px;
+  padding: 24px clamp(16px, 3vw, 36px);
+  gap: 20px;
+}
+
+.grow {
+  flex: 1;
+}
+
+/* Top bar: avatar + who, then round 44 px icon buttons. */
+.topbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.topbar .who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar .who b {
+  font-family: var(--display);
+  font-size: 20px;
+  color: var(--title);
+}
+
+.topbar .who span {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.topbar h1 {
+  flex: 1;
+  min-width: 0;
+  font-size: 21px;
+}
+
+.avatar {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--avatar-bg);
+  border: 1.5px solid var(--accent-line);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar.violet {
+  width: 54px;
+  height: 54px;
+  background: var(--violet-soft);
+  border-color: var(--violet-line);
+}
+
+.avatar.lg {
+  width: 96px;
+  height: 96px;
+  border-width: 2px;
+}
+
+.avatar.xl {
+  width: 150px;
+  height: 150px;
+  border-width: 2px;
+}
+
+.icon-btn {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.timer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 13px;
+  font-size: 15px;
+  font-weight: 700;
+  background: var(--card);
+}
+
+.timer svg {
+  color: var(--accent-text);
+}
+
+/* Chat | Flow segmented tabs. */
+.tabs {
+  flex: none;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 26px;
+  background: var(--card);
+  border: 1px solid var(--border);
+}
+
+.tabs button {
+  flex: 1;
+  height: 44px;
+  border-radius: 22px;
+  border: 0;
+  background: transparent;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tabs button[aria-selected='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* --- Chat ----------------------------------------------------------------- */
+
+/* The chat fills the screen: header, tabs and the card stay put, only the conversation scrolls. */
+.app.chat {
+  height: 100dvh;
+  min-height: 0;
+}
+
+.transcript {
+  flex: 1;
+  min-height: 96px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Bubbles sit at the bottom, near the card, until there are enough to scroll. */
+.transcript > :first-child {
+  margin-top: auto;
+}
+
+.bubble {
+  max-width: 88%;
+  padding: 11px 15px;
+  border-radius: 20px;
+  background: var(--field);
+  border: 1px solid var(--border);
+  font-size: 16px;
+  line-height: 1.4;
+  align-self: flex-start;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.bubble.user {
+  align-self: flex-end;
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+
+/* Coordinator news ("A joined", "seats filled"): the Coordinator's violet, a little quieter. */
+.bubble.update {
+  background: var(--violet-soft);
+  border-color: var(--violet-line);
+  font-size: 15px;
+}
+
+.bubble.typing {
+  color: var(--muted);
+  letter-spacing: 0.2em;
+}
+
+.composer {
+  flex: none;
+  display: flex;
+  gap: 8px;
+}
+
+.composer input {
+  flex: 1;
+  min-width: 0;
+  height: 52px;
+  padding: 0 18px;
+  border-radius: 26px;
+  border: 1.5px solid var(--border);
+  background: var(--card);
+}
+
+.composer input::placeholder {
+  color: var(--muted);
+}
+
+.composer .icon-btn {
+  width: 52px;
+  height: 52px;
+  border-radius: 26px;
+  border: 0;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.composer .icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* --- Cards ---------------------------------------------------------------- */
+
+.card {
+  flex: none;
+  background: var(--card);
+  border: 1.5px solid var(--accent-line);
+  border-radius: 24px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--card-glow);
+}
+
+.card.violet {
+  border-color: var(--violet-line);
+  box-shadow: var(--violet-glow);
+}
+
+.card.plain {
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+
+.card.group {
+  padding: 14px 10px;
+  gap: 6px;
+}
+
+.card.group > :not(.seats) {
+  margin: 0 6px;
+}
+
+.card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.card-head h2 {
+  font-size: 25px;
+}
+
+.card-head .muted {
+  font-size: 15px;
+}
+
+.eyebrow {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-text);
+}
+
+.eyebrow.violet {
+  color: var(--violet);
+}
+
+.eyebrow.green {
+  color: var(--green-text);
+}
+
+.eyebrow.amber {
+  color: var(--amber-text);
+}
+
+.eyebrow.muted {
+  color: var(--muted);
+}
+
+.split-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.split-head b {
+  font-size: 17px;
+  color: var(--title);
+}
+
+/* The Coordinator speaking: walrus + "COORDINATOR" + a line. */
+.speaker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.speaker > div:last-child {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 16px;
+}
+
+.meta div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.meta svg {
+  flex: none;
+  color: var(--accent-text);
+}
+
+.note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.note svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.note.center {
+  justify-content: center;
+  align-items: center;
+  font-size: 13px;
+}
+
+/* "What I'd share" rows. */
+.share-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.share-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  border: 1.5px solid var(--border);
+}
+
+.share-row > div {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.share-row span {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.share-row b {
+  font-size: 16px;
+  color: var(--title);
+}
+
+.piece-icon {
+  flex: none;
+  stroke: var(--accent);
+}
+
+/* --- Buttons and chips (one primary per screen, never below 44 px) -------- */
+
+.btn {
+  height: 54px;
+  padding: 0 24px;
+  border-radius: 27px;
+  border: 1.5px solid var(--sec);
+  background: transparent;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.btn.primary {
+  border: 0;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.btn.big {
+  height: 62px;
+  border-radius: 31px;
+  font-size: 19px;
+}
+
+.btn:disabled,
+.btn[aria-disabled='true'] {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.btn-row {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-row > * {
+  flex: 1;
+}
+
+.btn-row > .wide {
+  flex: 1.5;
+}
+
+.link {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 15px;
+  text-decoration: underline;
+  cursor: pointer;
+  align-self: center;
+}
+
+.sizes {
+  display: flex;
+  gap: 10px;
+}
+
+.sizes button {
+  flex: 1;
+  height: 84px;
+  border-radius: 22px;
+  border: 2px solid var(--chip-border);
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.sizes button b {
+  font-family: var(--display);
+  font-size: 34px;
+  line-height: 1.1;
+}
+
+.sizes button span {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sizes button[aria-pressed='true'],
+.choice[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.choice {
+  flex: 1;
+  min-height: 52px;
+  border-radius: 26px;
+  border: 1.5px solid var(--chip-border);
+  background: transparent;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Status pills: You ✓ · A ✓ · B ⋯ */
+.marks {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.marks.left {
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+.mark {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  border: 1.5px solid currentColor;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--amber-text);
+}
+
+.mark.ok {
+  color: var(--green-text);
+}
+
+.mark.big {
+  padding: 8px 13px;
+  font-size: 15px;
+}
+
+.mark small {
+  font-size: inherit;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+/* Full-width status in place of a button: amber while waiting. */
+.status {
+  height: 54px;
+  border-radius: 27px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  background: var(--amber-soft);
+  border: 1.5px solid var(--amber);
+  color: var(--amber-text);
+}
+
+.status.big {
+  height: 62px;
+  border-radius: 31px;
+  font-size: 17px;
+}
+
+.line-ok {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--green-text);
+}
+
+.progress {
+  width: 100%;
+  max-width: 220px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+  align-self: center;
+}
+
+.card .progress {
+  max-width: none;
+}
+
+.progress div {
+  width: 40%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--accent);
+  animation: bar 1.6s ease-in-out infinite;
+}
+
+.error {
+  padding: 10px 14px;
+  border-radius: 16px;
+  border: 1.5px solid var(--danger);
+  color: var(--danger);
+  font-size: 15px;
+}
+
+/* --- Seats around the walrus ---------------------------------------------- */
+
+.seats {
+  width: 100%;
+  max-width: 340px;
+  align-self: center;
+  overflow: visible;
+}
+
+.seats .core {
+  fill: var(--violet);
+  opacity: calc(0.12 + var(--glow) * 0.1);
+  animation: core 2.6s ease-in-out infinite;
+}
+
+.seats .core-ring {
+  fill: var(--card);
+  stroke: var(--violet);
+  stroke-width: 2.5;
+}
+
+.seats .link {
+  fill: none;
+  stroke: var(--grey);
+  stroke-width: 2;
+  stroke-linecap: round;
+  opacity: 0.5;
+  transition: opacity 500ms ease;
+}
+
+.seats .link.you {
+  stroke: var(--teal);
+  stroke-width: 3;
+  opacity: 1;
+}
+
+.seats .link.open {
+  stroke-dasharray: 2 9;
+  opacity: 0.3;
+}
+
+.seats .link.think {
+  stroke: var(--teal);
+  stroke-dasharray: 3 9;
+  opacity: 0.9;
+  animation: dash-out 1.3s linear infinite;
+}
+
+.seats .link.in {
+  stroke: var(--green);
+  stroke-width: 2.6;
+  opacity: 0.9;
+}
+
+.seats .link.time {
+  stroke: var(--amber);
+  stroke-dasharray: 3 9;
+  opacity: 0.9;
+  animation: dash-in 1.3s linear infinite;
+}
+
+.seats .link.no {
+  opacity: 0.15;
+}
+
+.seats .link.acc {
+  stroke: var(--green);
+  stroke-width: 3.2;
+  opacity: 1;
+}
+
+.seats g.seat {
+  transition: opacity 500ms ease, transform 700ms cubic-bezier(0.2, 0.9, 0.25, 1.15);
+}
+
+.seat .shape {
+  fill: var(--paper);
+  stroke: var(--grey);
+  stroke-width: 5;
+  stroke-linejoin: round;
+}
+
+.seat text {
+  text-anchor: middle;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 20px;
+  fill: var(--muted);
+}
+
+.seat text.you {
+  font-size: 14px;
+}
+
+.seat text.word {
+  font-family: var(--body);
+  font-size: 13.5px;
+  fill: var(--muted);
+}
+
+.seat .plus {
+  stroke: var(--grey);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+
+.seat.you .shape {
+  fill: var(--teal-fill);
+  stroke: var(--teal);
+  filter: drop-shadow(0 0 calc(var(--glow) * 5px) var(--teal));
+}
+
+.seat.you text {
+  fill: var(--teal);
+}
+
+.seat.open .shape {
+  stroke-dasharray: 9 8;
+}
+
+.seat.think .shape {
+  stroke: var(--teal);
+  stroke-dasharray: 9 8;
+}
+
+.seat.think .pop {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.seat.think text:not(.word) {
+  fill: var(--teal);
+}
+
+.seat.in .shape {
+  fill: var(--green-fill);
+  stroke: var(--green);
+}
+
+.seat.time .shape {
+  fill: var(--amber-soft);
+  stroke: var(--amber);
+}
+
+.seat.no {
+  opacity: 0.45;
+}
+
+.seat.no .shape {
+  stroke-dasharray: 5 7;
+}
+
+.seat.acc .shape {
+  fill: var(--green-solid);
+  stroke: var(--green);
+  filter: drop-shadow(0 0 calc(var(--glow) * 7px) var(--green));
+}
+
+.seat.acc .pop {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bounce 700ms ease-out 1;
+}
+
+.seat.in text,
+.seat.acc text {
+  fill: var(--green);
+}
+
+.seat.time text {
+  fill: var(--amber);
+}
+
+.seat.no text {
+  fill: var(--grey);
+}
+
+.badge circle {
+  fill: var(--green);
+  stroke: var(--card);
+  stroke-width: 2.5;
+}
+
+.badge.time circle:first-child {
+  fill: var(--amber);
+}
+
+.badge.no circle {
+  fill: var(--grey);
+}
+
+.badge path,
+.badge .hollow {
+  fill: none;
+  stroke: var(--badge-ink);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.badge .hollow {
+  stroke-width: 2;
+}
+
+/* --- Sign-in -------------------------------------------------------------- */
+
+.welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  padding-top: 12px;
+}
+
+.welcome h1 {
+  font-size: 32px;
+}
+
+.welcome p {
+  max-width: 320px;
+}
+
+.people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.people .btn {
+  flex: 1 1 40%;
+  height: 52px;
+}
+
+details.card summary {
+  cursor: pointer;
   list-style: none;
+  font-weight: 700;
+}
+
+details.card summary::-webkit-details-marker {
+  display: none;
+}
+
+details.card summary::after {
+  content: ' ▾';
+  color: var(--muted);
+}
+
+details[open].card summary::after {
+  content: ' ▴';
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.field {
+  height: 54px;
+  padding: 0 18px;
+  border-radius: 18px;
+  border: 1.5px solid var(--border);
+  background: var(--field);
+  font-size: 17px;
+}
+
+.watch {
+  align-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 22px;
+  border: 1.5px solid var(--violet-line);
+  color: var(--violet);
+  font-weight: 700;
+  font-size: 15px;
+}
+
+/* --- Menu sheet ----------------------------------------------------------- */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.sheet {
+  width: 100%;
+  max-width: 480px;
+  max-height: 88dvh;
+  overflow-y: auto;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-bottom: 0;
+  border-radius: 28px 28px 0 0;
+  padding: 18px 16px max(22px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rules {
+  list-style: none;
+  margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.board li {
+.rules li {
   display: flex;
-  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+
+.rules .n {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rules b {
+  display: block;
+  color: var(--title);
+}
+
+.rules span {
+  font-size: 14px;
   color: var(--muted);
 }
 
-.board li.here {
-  color: var(--ok);
-  font-weight: 600;
-}
+/* --- Reconnecting / offline ----------------------------------------------- */
 
-button.primary {
-  font: inherit;
-  font-size: 1.1rem;
-  font-weight: 600;
-  padding: 16px;
-  border: 0;
-  border-radius: 14px;
-  background: var(--accent);
-  color: var(--accent-text);
-  cursor: pointer;
-}
-
-button.primary:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-input,
-select {
-  font: inherit;
-  padding: 12px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-  width: 100%;
-}
-
-.done img {
-  width: 100%;
-  border-radius: 10px;
-}
-
-.error {
-  color: var(--error);
-}
-
-label {
+.conn {
+  flex: 1;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  text-align: center;
+  padding: 0 8px;
+}
+
+.conn h2 {
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.conn p {
+  font-size: 17px;
+  max-width: 300px;
+}
+
+/* --- Challenge ------------------------------------------------------------ */
+
+.hero h2 {
+  font-size: 29px;
+  line-height: 1.18;
+}
+
+.hint {
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: var(--amber-soft);
+  color: var(--text);
+}
+
+.step-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.step-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.step-list .step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 17px;
+  font-weight: 500;
+  color: var(--title);
+}
+
+.step-list .dot {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2.4px solid var(--grey);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.step-list li.lock .dot {
+  border-style: dashed;
+}
+
+.step-list li.lock .step {
+  color: var(--muted);
+}
+
+.step-list li.cur .dot {
+  border-color: var(--accent);
+}
+
+.step-list li.cur .dot::after {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.step-list li.cur .step {
+  font-weight: 700;
+}
+
+.step-list li.done .dot {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.step-list .why {
+  margin-left: 38px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.step-list .why.not {
+  color: var(--amber-text);
+}
+
+.step-list .btn {
+  margin-left: 38px;
+  height: 48px;
+}
+
+.group-photo {
+  width: 100%;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+}
+
+.stars {
+  display: flex;
   gap: 6px;
 }
 
-.row {
-  display: flex;
-  gap: 10px;
-}
-
-.row button {
-  flex: 1;
-}
-
-button.secondary {
-  font: inherit;
-  font-size: 1.1rem;
-  padding: 16px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: var(--card);
-  color: var(--text);
+.stars button {
+  width: 48px;
+  height: 48px;
+  border: 0;
+  background: none;
   cursor: pointer;
+  color: var(--grey);
+  padding: 0;
 }
 
-a.pill {
-  text-decoration: none;
+.stars button.on {
+  color: var(--star);
 }
 
-/* Negotiation screen (?view=log) */
-.app.wide {
-  max-width: 1100px;
+.stars button.on svg {
+  fill: currentColor;
 }
 
-.split {
-  display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+.question {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.question > p {
+  font-weight: 700;
+  color: var(--title);
+}
+
+.private {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+/* --- Install hint --------------------------------------------------------- */
+
+.install ol {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* --- Negotiation log (?view=log) ------------------------------------------ */
+
+.log-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.log-top .brand {
+  display: flex;
+  align-items: center;
   gap: 14px;
 }
 
-@media (max-width: 760px) {
-  .split {
+.log-top .brand > svg {
+  color: var(--teal);
+}
+
+.log-top h1 {
+  font-size: 30px;
+}
+
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.live-pill::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--grey);
+}
+
+.live-pill.on {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent-text);
+}
+
+.live-pill.on::before {
+  background: var(--teal);
+}
+
+.log-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+}
+
+@media (max-width: 860px) {
+  .log-split {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-.pill.live {
-  color: var(--ok);
-  border-color: var(--ok);
+.feed {
+  max-height: min(76dvh, 760px);
+  overflow-y: auto;
+  gap: 4px;
+  box-shadow: none;
+  border: 1px solid var(--border);
+}
+
+.event {
+  display: flex;
+  gap: 14px;
+  align-items: baseline;
+  padding: 5px 10px;
+  border-radius: 10px;
+  font-family: var(--mono);
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.event:last-of-type {
+  background: var(--field);
+  color: var(--title);
+}
+
+.event .tag {
+  flex: none;
+  width: 112px;
+  font-weight: 600;
+}
+
+.tag.coordinator {
+  color: var(--tag-coordinator);
+}
+
+.tag.broker {
+  color: var(--tag-broker);
+}
+
+.tag.match {
+  color: var(--teal);
+}
+
+.tag.approval {
+  color: var(--tag-approval);
+}
+
+.tag.challenge {
+  color: var(--tag-challenge);
+}
+
+.tag.game {
+  color: var(--title);
+}
+
+@media (max-width: 600px) {
+  .event {
+    gap: 10px;
+    font-size: 13px;
+  }
+
+  .event .tag {
+    width: 98px;
+  }
 }
 
 .net {
   width: 100%;
-  height: auto;
-}
-
-.net text {
-  text-anchor: middle;
-  font-size: 13px;
-  font-weight: 600;
-  fill: var(--text);
-}
-
-.net text.sub {
-  font-size: 11px;
-  font-weight: 400;
-  fill: var(--muted);
+  font-family: var(--body);
 }
 
 .net .spoke {
@@ -224,250 +1455,166 @@ a.pill {
   stroke-width: 1.5;
 }
 
-
-
-.net .hub circle {
-  fill: var(--card);
-  stroke: var(--accent);
-  stroke-width: 3;
-}
-
-.net .node circle {
-  fill: var(--card);
-  stroke: var(--muted);
-  stroke-width: 2;
-  transition: fill 0.3s, stroke 0.3s;
-}
-
-.net .node.asked circle {
-  stroke: var(--accent);
-  stroke-width: 3;
-}
-
-.net .node.yes circle,
-.net .node.accepted circle,
-.net .node.grouped circle {
-  stroke: var(--ok);
-  stroke-width: 3;
-}
-
-.net .node.no circle {
-  stroke: var(--error);
-}
-
-.net .node.here circle,
-.net .node.done circle {
-  fill: var(--ok);
-  stroke: var(--ok);
-}
-
-.net .node.here text:not(.name):not(.sub),
-.net .node.done text:not(.name):not(.sub) {
-  fill: var(--accent-text);
-}
-
 .net .pulse {
-  fill: var(--ok);
+  fill: var(--green);
 }
 
 .net .pulse.out {
-  fill: var(--accent);
+  fill: var(--teal);
 }
 
-.feed {
-  max-height: 560px;
-  overflow-y: auto;
-  gap: 6px;
+.net .hub circle {
+  fill: var(--card);
+  stroke: var(--violet);
+  stroke-width: 2.5;
 }
 
-.event {
-  font-size: 0.9rem;
-  line-height: 1.4;
+.net .hub text {
+  text-anchor: middle;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 13px;
+  fill: var(--violet);
 }
 
-.tag {
-  display: inline-block;
-  min-width: 82px;
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--muted);
+.net .hub .sub {
+  font-family: var(--body);
+  font-weight: 500;
+  font-size: 11px;
+  fill: var(--muted);
 }
 
-.tag.match {
-  color: var(--accent);
+.net .node circle {
+  fill: var(--paper);
+  stroke: var(--grey);
+  stroke-width: 2.5;
 }
 
-.tag.broker,
-.tag.approval {
-  color: var(--ok);
+.net .node text {
+  text-anchor: middle;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 14px;
+  fill: var(--text);
 }
 
-.tag.game,
-.tag.challenge {
-  color: var(--text);
-  font-weight: 600;
+.net .node .name {
+  font-family: var(--body);
+  font-size: 12px;
 }
 
-/* Chat with your agent */
-button.pill,
-button.link {
-  font: inherit;
-  background: none;
-  cursor: pointer;
+.net .node .sub {
+  font-family: var(--body);
+  font-weight: 500;
+  font-size: 11px;
+  fill: var(--muted);
 }
 
-header .row button.pill {
-  flex: none;
-  font-size: 0.85rem;
+.net .node.asked circle {
+  stroke: var(--teal);
+  stroke-dasharray: 5 4;
 }
 
-button.link {
-  border: 0;
-  padding: 0;
-  color: var(--accent);
-  text-decoration: underline;
+.net .node.yes circle,
+.net .node.grouped circle {
+  stroke: var(--green);
+  fill: var(--green-fill);
 }
 
-.transcript {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.net .node.no circle {
+  opacity: 0.45;
+  stroke-dasharray: 4 5;
 }
 
-.bubble {
-  max-width: 85%;
-  padding: 10px 14px;
-  border-radius: 16px;
-  line-height: 1.4;
-  white-space: pre-wrap;
+.net .node.accepted circle,
+.net .node.here circle,
+.net .node.done circle {
+  stroke: var(--green);
+  fill: var(--green-solid);
 }
 
-.bubble.agent {
-  align-self: flex-start;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-bottom-left-radius: 4px;
+/* --- Motion (all of it behind prefers-reduced-motion) --------------------- */
+
+.blink {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: blink 5s ease-in-out infinite;
 }
 
-.bubble.user {
-  align-self: flex-end;
-  background: var(--accent);
-  color: var(--accent-text);
-  border-bottom-right-radius: 4px;
+@keyframes blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  96% {
+    transform: scaleY(0.1);
+  }
 }
 
-.board li.open {
-  font-style: italic;
-  opacity: 0.7;
+@keyframes bar {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(250%);
+  }
 }
 
-.composer {
-  position: sticky;
-  bottom: 0;
-  display: flex;
-  gap: 8px;
-  padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
-  background: var(--bg);
+@keyframes dash-out {
+  to {
+    stroke-dashoffset: -24;
+  }
 }
 
-.composer button.primary {
-  padding: 12px 16px;
-  font-size: 1rem;
+@keyframes dash-in {
+  to {
+    stroke-dashoffset: 24;
+  }
 }
 
-/* Add to Home Screen helper */
-.install .steps {
-  padding-left: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  line-height: 1.4;
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
 }
 
-.install button.link {
-  align-self: flex-start;
+@keyframes bounce {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.14);
+  }
+  70% {
+    transform: scale(0.97);
+  }
 }
 
-/* A player's own hint, revealed on "Need a hint?" */
-.hint {
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: var(--bg);
-  border: 1px dashed var(--accent);
-  line-height: 1.4;
+@keyframes core {
+  0%,
+  100% {
+    opacity: calc(0.12 + var(--glow) * 0.1);
+  }
+  50% {
+    opacity: calc(0.06 + var(--glow) * 0.05);
+  }
 }
 
-/* Sign-in and consent */
-.small {
-  font-size: 0.85rem;
-}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 
-.stack {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 10px;
-}
-
-details summary {
-  cursor: pointer;
-}
-
-.shared {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-/* News from the coordinator, posted into the chat by your agent */
-.bubble.update {
-  align-self: center;
-  max-width: 92%;
-  font-size: 0.9rem;
-  color: var(--muted);
-  background: transparent;
-  border: 1px dashed var(--border);
-  text-align: center;
-}
-
-/* Game page: photo steps and the end screen */
-ol.challenge-steps {
-  padding-left: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-ol.challenge-steps li {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-ol.challenge-steps li.passed {
-  color: var(--ok);
-}
-
-.stars button.star {
-  font-size: 2rem;
-  background: none;
-  border: 0;
-  color: var(--border);
-  cursor: pointer;
-  padding: 4px;
-}
-
-.stars button.star.on {
-  color: #f5b301;
-}
-
-.row.wrap {
-  flex-wrap: wrap;
-}
-
-.not-quite {
-  color: #b26a00;
+  .seat.think .pop {
+    opacity: 0.8;
+  }
 }

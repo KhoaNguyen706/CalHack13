@@ -5,12 +5,12 @@ import { useEffect, useRef, useState } from 'react';
 import { useReducer, useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { reducers, tables } from './module_bindings';
 import { AGENTS, API } from './config.ts';
+import { CardHead, Icon, Pebble, Walrus } from './ui.tsx';
 
 const params = new URLSearchParams(location.search);
 const MATCH = params.get('match') ?? '';
 const AGENT = params.get('agent') ?? '';
-
-const ROLE_LABEL: Record<string, string> = { riddles: 'Key 1 · riddles', map: 'Key 2 · map', camera: 'Key 3 · camera' };
+const CHAT = `?agent=${AGENT}`;
 
 type Step = { id: string; task: string; passed: boolean; reason: string | null };
 type View = {
@@ -79,7 +79,7 @@ function useChallenge() {
 }
 
 // A hidden camera input: capture opens the camera straight away on phones.
-function Camera({ facing, label, busy, onPhoto }: { facing: 'user' | 'environment'; label: string; busy: string; onPhoto: (f: File) => Promise<unknown> }) {
+function Camera({ facing, label, busy, big, onPhoto }: { facing: 'user' | 'environment'; label: string; busy: string; big?: boolean; onPhoto: (f: File) => Promise<unknown> }) {
   const input = useRef<HTMLInputElement>(null);
   const [working, setWorking] = useState(false);
   return (
@@ -98,8 +98,34 @@ function Camera({ facing, label, busy, onPhoto }: { facing: 'user' | 'environmen
           onPhoto(file).finally(() => setWorking(false));
         }}
       />
-      <button className="primary" disabled={working} onClick={() => input.current?.click()}>{working ? busy : label}</button>
+      <button className={big ? 'btn primary big' : 'btn'} disabled={working} onClick={() => input.current?.click()}>
+        <Icon name="camera" size={big ? 24 : 20} />
+        {working ? busy : label}
+      </button>
     </>
+  );
+}
+
+// Top bar: back to your agent, the screen's title, minutes left.
+function Top({ heading, minutes }: { heading: string; minutes?: number }) {
+  return (
+    <header className="topbar">
+      <a className="icon-btn" href={CHAT} aria-label="Back to chat"><Icon name="back" size={22} /></a>
+      <h1>{heading}</h1>
+      {minutes !== undefined && <span className="timer"><Icon name="clock" size={16} />{minutes} min left</span>}
+    </header>
+  );
+}
+
+function Waiting({ text }: { text: string }) {
+  return (
+    <Shell>
+      <Top heading="Challenge" />
+      <section className="conn">
+        <div className="avatar xl"><Pebble mood="thinking" size={164} /></div>
+        <h2>{text}</h2>
+      </section>
+    </Shell>
   );
 }
 
@@ -146,7 +172,7 @@ export default function App() {
   const leave = async () => {
     if (!confirm('Leave this challenge? The others carry on without you.')) return;
     await post(`${API}/matches/${MATCH}/leave`, { agent_id: AGENT });
-    location.assign(`?agent=${AGENT}`);
+    location.assign(CHAT);
   };
 
   // One step's photo: the AI checks it and every phone sees the ✓.
@@ -165,105 +191,115 @@ export default function App() {
     await submitPhoto({ matchId: MATCH, url: AGENTS + path });
   };
 
-  if (!MATCH || !AGENT) return <Shell><p>Open the game link from your agent.</p></Shell>;
-  if (!isActive) return <Shell><p className="muted">Connecting…</p></Shell>;
-  if (!round) return <Shell><p className="muted">Waiting for your round to start…</p></Shell>;
+  if (!MATCH || !AGENT) return <Waiting text="Open the game link from your agent." />;
+  if (!isActive) return <Waiting text="Connecting…" />;
+  if (!round) return <Waiting text="Waiting for your round to start…" />;
 
-  const live = ['playing', 'unlocked'].includes(round.state);
+  // Called off: too few people were left. The Coordinator says sorry and your agent keeps looking.
+  if (round.state === 'cancelled') {
+    return (
+      <Shell>
+        <Top heading="Chat" />
+        <div className="grow" />
+        <p className="bubble">Quick update from the Coordinator.</p>
+        <section className="card plain center" style={{ alignItems: 'center' }}>
+          <div className="avatar violet lg"><Walrus mood="sorry" size={90} /></div>
+          <CardHead eyebrow="Called off" tone="muted" title="This challenge was called off." />
+          <p className="muted">Too few people were left to finish it. I'm sorry about that. I'll keep an eye out for the next one.</p>
+          <a className="btn primary" style={{ alignSelf: 'stretch' }} href={CHAT}>Back to chat</a>
+        </section>
+      </Shell>
+    );
+  }
+
+  if (round.state === 'done') {
+    const others = view?.members.filter(m => m.agent_id !== AGENT).map(m => m.name) ?? [];
+    return (
+      <Shell>
+        <Top heading="All done" />
+        <section className="card">
+          <CardHead eyebrow="Challenge done" tone="green" title="You did it!" sub={others.length ? `With ${others.join(' and ')}` : undefined} />
+          {photos[0] && <img className="group-photo" src={photos[0].url} alt="Your group photo" />}
+        </section>
+        <EndScreen photoUrl={photos[0]?.url} />
+        {error && <p className="error">{error}</p>}
+      </Shell>
+    );
+  }
+
+  const unlocked = round.state === 'unlocked';
   const passed = steps.filter(s => s.passed).length;
+  const here = seats.filter(s => s.checkedIn).length;
 
   return (
     <Shell>
-      <header>
-        <h1>{view?.challenge?.title ?? 'Krew'}</h1>
-        {live && minutesLeft !== undefined && <span className="pill">{minutesLeft} min left</span>}
-      </header>
-      {view?.challenge?.goal && live && <p className="muted">{view.challenge.goal}</p>}
+      <Top heading={view?.challenge?.title ?? 'Challenge'} minutes={minutesLeft} />
 
-      {live && (myKey ? (
-        <section className="card key">
-          <p className="label">{ROLE_LABEL[myKey.role] ?? 'Your part'}</p>
-          <p className="big">{myKey.key}</p>
-          <p className="muted">Tell your group your part. Nobody can finish alone.</p>
-          {myHint && (showHint ? (
-            <p className="hint">💡 {myHint}</p>
-          ) : (
-            <button className="link" onClick={() => setShowHint(true)}>💡 Need a hint?</button>
-          ))}
+      {myKey ? (
+        <section className="card hero">
+          <CardHead eyebrow="Your part" />
+          <h2>{myKey.key}</h2>
+          {view?.challenge?.goal && <p className="muted">{view.challenge.goal}</p>}
+          <p className="muted small">Tell your group your part. Nobody can finish alone.</p>
+          {myHint && (showHint ? <p className="hint">💡 {myHint}</p> : <button className="link" onClick={() => setShowHint(true)}>Need a hint?</button>)}
         </section>
       ) : (
-        <section className="card"><p className="muted">Joining as {nameOf(AGENT)}…</p></section>
+        <section className="card plain"><p className="muted">Joining as {nameOf(AGENT)}…</p></section>
+      )}
+
+      <section className="card plain">
+        <div className="split-head">
+          <span className="eyebrow muted">Steps</span>
+          {steps.length > 0 && <span className="muted small"><b>{passed} of {steps.length}</b> done</span>}
+        </div>
+        <ol className="step-list">
+          <li className={unlocked ? 'done' : 'cur'}>
+            <p className="step"><span className="dot">{unlocked && <Icon name="check" size={14} />}</span>Meet your group and tap We're here</p>
+          </li>
+          {steps.map(s => (
+            <li key={s.id} className={s.passed ? 'done' : unlocked ? 'cur' : 'lock'}>
+              <p className="step"><span className="dot">{s.passed && <Icon name="check" size={14} />}</span>{s.task}</p>
+              {s.passed && s.reason && <p className="why">{s.reason}</p>}
+              {!s.passed && unlocked && (
+                <>
+                  {notQuite[s.id] && <p className="why not">Not quite: {notQuite[s.id]}</p>}
+                  <Camera facing="environment" label={notQuite[s.id] ? 'Try another photo' : 'Photo for this step'} busy="Checking…" onPhoto={f => run(checkStep(s.id, f))} />
+                </>
+              )}
+            </li>
+          ))}
+          <li className={unlocked && passed === steps.length ? 'cur' : 'lock'}>
+            <p className="step"><span className="dot" />Take the group photo</p>
+          </li>
+        </ol>
+      </section>
+
+      <section className="card plain">
+        <div className="split-head">
+          <span className="eyebrow muted">Who's here</span>
+          <b className="small" style={{ color: here === seats.length ? 'var(--green-text)' : 'var(--muted)' }}>{here} of {seats.length} here</b>
+        </div>
+        <div className="marks left">
+          {seats.map(s => (
+            <span key={s.seatId} className={`mark big${s.checkedIn ? ' ok' : ''}`}>
+              <Icon name={s.checkedIn ? 'check' : 'clock'} size={16} />
+              {s.seatId === mySeat?.seatId ? 'You' : nameOf(s.agentId)}
+              <small>· {s.checkedIn ? 'here' : s.player ? 'on the way' : 'not joined'}</small>
+            </span>
+          ))}
+        </div>
+      </section>
+
+      <div className="grow" />
+
+      {round.state === 'playing' && (mySeat?.checkedIn ? (
+        <div className="status big"><Icon name="clock" size={20} /><span>Waiting for the others…</span></div>
+      ) : (
+        <button className="btn primary big" disabled={!mySeat} onClick={() => run(checkIn({ matchId: MATCH }))}>We're here</button>
       ))}
+      {unlocked && <Camera facing="user" big label="Take the group photo" busy="Sending the photo…" onPhoto={f => run(groupPhoto(f))} />}
 
-      {live && (
-        <section className="card">
-          <p className="label">Your group</p>
-          <ul className="board">
-            {seats.map(s => (
-              <li key={s.seatId} className={s.checkedIn ? 'here' : ''}>
-                <span>{nameOf(s.agentId)}{s.seatId === mySeat?.seatId ? ' (you)' : ''}</span>
-                <span>{s.checkedIn ? '✓ here' : s.player ? 'on the way' : 'not joined'}</span>
-              </li>
-            ))}
-          </ul>
-          {round.state === 'playing' && (
-            <button className="primary" disabled={!mySeat || mySeat.checkedIn} onClick={() => run(checkIn({ matchId: MATCH }))}>
-              {mySeat?.checkedIn ? 'Waiting for the others…' : "We're here"}
-            </button>
-          )}
-        </section>
-      )}
-
-      {round.state === 'unlocked' && steps.length > 0 && (
-        <section className="card">
-          <p className="label">Steps · {passed} of {steps.length} done</p>
-          <ol className="challenge-steps">
-            {steps.map(s => (
-              <li key={s.id} className={s.passed ? 'passed' : ''}>
-                <p>{s.passed ? '✓ ' : ''}{s.task}</p>
-                {s.passed ? (
-                  s.reason && <p className="muted small">{s.reason}</p>
-                ) : (
-                  <>
-                    {notQuite[s.id] && <p className="small not-quite">Not quite: {notQuite[s.id]}</p>}
-                    <Camera facing="environment" label={notQuite[s.id] ? '📸 Try another photo' : '📸 Photo for this step'} busy="Checking…" onPhoto={f => run(checkStep(s.id, f))} />
-                  </>
-                )}
-              </li>
-            ))}
-          </ol>
-        </section>
-      )}
-
-      {round.state === 'unlocked' && (
-        <section className="card">
-          <p className="label">
-            {steps.length === 0 || passed === steps.length ? "Everyone's here! Finish with the group photo" : 'When you\'re done: the group photo'}
-          </p>
-          <Camera facing="user" label="📸 Take the group photo" busy="Sending the photo…" onPhoto={f => run(groupPhoto(f))} />
-        </section>
-      )}
-
-      {round.state === 'cancelled' && (
-        <section className="card">
-          <p className="big">This challenge was called off</p>
-          <p className="muted">Too few people were left to finish it. Your agent can find you a new one.</p>
-          <a className="pill" href={`?agent=${AGENT}`}>Back to your agent</a>
-        </section>
-      )}
-
-      {round.state === 'done' && (
-        <section className="card done">
-          <p className="big">Challenge complete! 🎉</p>
-          {view && <p className="muted">With {view.members.filter(m => m.agent_id !== AGENT).map(m => m.name).join(' and ')}</p>}
-          {photos[0] && <img src={photos[0].url} alt="Your group photo" />}
-        </section>
-      )}
-      {round.state === 'done' && <EndScreen photoUrl={photos[0]?.url} />}
-
-      {live && <button className="link" onClick={() => run(leave())}>Leave challenge</button>}
-      {round.state === 'done' && <a className="pill" href={`?agent=${AGENT}`}>Back to your agent</a>}
-
+      <button className="link" onClick={() => run(leave())}>Leave challenge</button>
       {error && <p className="error">{error}</p>}
     </Shell>
   );
@@ -310,48 +346,62 @@ function EndScreen({ photoUrl }: { photoUrl?: string }) {
   };
 
   if (summary && answered) {
+    const mine = summary.my_matches;
     return (
       <section className="card">
-        <p className="label">Thanks!</p>
-        {summary.my_matches.length > 0 ? (
+        <CardHead eyebrow="Thanks!" title={mine.length ? 'You want to meet again' : 'Your answers are in'} />
+        {mine.length > 0 ? (
           <p>
-            🤝 {summary.my_matches.length === 1
-              ? `You and ${summary.my_matches[0]} both want to meet again.`
-              : `You, ${summary.my_matches.slice(0, -1).join(', ')} and ${summary.my_matches[summary.my_matches.length - 1]} all want to meet again.`}
+            {mine.length === 1
+              ? `You and ${mine[0]} both want to meet again.`
+              : `You, ${mine.slice(0, -1).join(', ')} and ${mine[mine.length - 1]} all want to meet again.`}
           </p>
         ) : (
           <p className="muted">Your answers stay private. If someone you'd meet again says yes too, you'll see it here.</p>
         )}
         {summary.waiting_for.length > 0 && <p className="muted small">Waiting for {summary.waiting_for.length} more to answer.</p>}
         {summary.share_ok ? (
-          <button className="primary" onClick={sharePhoto}>Share the group photo</button>
+          <button className="btn primary" onClick={sharePhoto}>Share the group photo</button>
         ) : (
-          <p className="muted small">The photo can be shared once everyone says OK.</p>
+          <p className="note"><Icon name="lock" size={16} /><span>The photo is only shared when everyone says yes. Nobody is told who said no.</span></p>
         )}
+        <a className="btn" href={CHAT}>Back to your agent</a>
       </section>
     );
   }
 
   return (
     <section className="card">
-      <p className="label">How was it?</p>
-      <div className="row stars" role="radiogroup" aria-label="Rating">
-        {[1, 2, 3, 4, 5].map(n => (
-          <button key={n} className={n <= rating ? 'star on' : 'star'} aria-label={`${n} of 5`} onClick={() => setRating(n)}>★</button>
-        ))}
+      <div className="question">
+        <div className="split-head">
+          <p><b>How was it?</b></p>
+          <span className="private"><Icon name="lock" size={14} />Private</span>
+        </div>
+        <div className="stars" role="radiogroup" aria-label="Rating">
+          {[1, 2, 3, 4, 5].map(n => (
+            <button key={n} className={n <= rating ? 'on' : ''} role="radio" aria-checked={n === rating} aria-label={`${n} of 5`} onClick={() => setRating(n)}>
+              <Icon name="star" size={36} />
+            </button>
+          ))}
+        </div>
       </div>
-      <p>Meet them again?</p>
-      <div className="row">
-        <button className={again === true ? 'primary' : 'secondary'} onClick={() => setAgain(true)}>Yes</button>
-        <button className={again === false ? 'primary' : 'secondary'} onClick={() => setAgain(false)}>No</button>
+      <div className="question">
+        <p>Meet them again?</p>
+        <div className="btn-row">
+          <button className="choice" aria-pressed={again === true} onClick={() => setAgain(true)}>Yes</button>
+          <button className="choice" aria-pressed={again === false} onClick={() => setAgain(false)}>Not now</button>
+        </div>
       </div>
-      <p>OK to share the group photo?</p>
-      <div className="row">
-        <button className={share === true ? 'primary' : 'secondary'} onClick={() => setShare(true)}>OK</button>
-        <button className={share === false ? 'primary' : 'secondary'} onClick={() => setShare(false)}>No</button>
+      <div className="question">
+        <span className="eyebrow amber">Needs everyone's OK</span>
+        <p>Share the group photo?</p>
+        <div className="btn-row">
+          <button className="choice" aria-pressed={share === true} onClick={() => setShare(true)}>I'm OK sharing</button>
+          <button className="choice" aria-pressed={share === false} onClick={() => setShare(false)}>No</button>
+        </div>
       </div>
-      <p className="muted small">Private: nobody sees your rating, and a "meet again" only shows if they said yes too.</p>
-      <button className="primary" disabled={!rating || again === null || share === null} onClick={send}>Send</button>
+      <p className="note"><Icon name="lock" size={16} /><span>Nobody sees your rating, and a "meet again" only shows if they said yes too.</span></p>
+      <button className="btn primary" disabled={!rating || again === null || share === null} onClick={send}>Done</button>
       {error && <p className="error">{error}</p>}
     </section>
   );

@@ -5,7 +5,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { AGENTS, API } from './config.ts';
 import InstallHint from './InstallHint.tsx';
-const SIZES = [2, 3, 4, 5];
+import { CardHead, Icon, Pebble, PieceIcon, PRIVACY_RULES, Reconnecting, Seats, Walrus, type Seat } from './ui.tsx';
+
+// Groups are 3 to 5, so strangers never meet one-on-one. The host can start early once this many accepted
+// (the coordinator's MIN_GROUP_SIZE has the final say).
+const SIZES = [3, 4, 5];
+const START_EARLY = 2;
 const KEY = 'threekey-agent';
 
 type Line = { role: 'agent' | 'user' | 'update'; text: string };
@@ -74,6 +79,33 @@ function title(id: string) {
   return id.charAt(0).toUpperCase() + id.slice(1);
 }
 
+const DAYS: Record<string, string> = { Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday' };
+
+// "Sat 14:00-15:30" -> "Saturday · 2:00 – 3:30 PM". Anything else is shown as it came.
+function when(window: string) {
+  const m = window.match(/^(\w{3}) (\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$/);
+  if (!m) return window;
+  const [, day, h1, m1, h2, m2] = m;
+  const clock = (h: string, min: string) => `${((+h + 11) % 12) + 1}:${min}`;
+  const half = (h: string) => (+h < 12 ? 'AM' : 'PM');
+  const start = clock(h1, m1) + (half(h1) === half(h2) ? '' : ` ${half(h1)}`);
+  return `${DAYS[day] ?? day} · ${start} – ${clock(h2, m2)} ${half(h2)}`;
+}
+
+function useOnline() {
+  const [online, setOnline] = useState(navigator.onLine);
+  useEffect(() => {
+    const on = () => setOnline(true), off = () => setOnline(false);
+    addEventListener('online', on);
+    addEventListener('offline', off);
+    return () => {
+      removeEventListener('online', on);
+      removeEventListener('offline', off);
+    };
+  }, []);
+  return online;
+}
+
 const QUERY = new URLSearchParams(location.search);
 const AGENT = QUERY.get('agent') ?? remembered(KEY) ?? '';
 
@@ -99,7 +131,18 @@ function FinishSignIn() {
   }, []);
   return (
     <main className="app">
-      {error ? <p className="error">{error} · <a href="/">back to sign-in</a></p> : <p className="muted">Signing you in…</p>}
+      <section className="conn">
+        <div className="avatar xl"><Pebble mood="thinking" size={164} /></div>
+        {error ? (
+          <>
+            <h2>That didn't work.</h2>
+            <p className="muted">{error}</p>
+            <a className="btn primary" href="/">Back to sign-in</a>
+          </>
+        ) : (
+          <h2>Signing you in…</h2>
+        )}
+      </section>
     </main>
   );
 }
@@ -134,46 +177,62 @@ function Login() {
 
   return (
     <main className="app">
-      <h1>Meet your agent</h1>
-      <InstallHint />
-      <p className="muted">
-        Your personal AI agent finds a small group nearby for a quick challenge. You approve every step, and nothing
-        about you is shared until you say OK.
-      </p>
+      <section className="welcome">
+        <div className="avatar xl"><Pebble mood="happy" size={164} /></div>
+        <h1>Meet Pebble, your agent</h1>
+        <p className="muted">
+          I find a small group nearby for a quick challenge you can only win together. You approve every step, and
+          nothing about you is shared until you say OK.
+        </p>
+      </section>
       {auth && (
         <section className="card">
-          <button className="primary" disabled={busy} onClick={() => { setBusy(true); goSignIn(auth.authority, auth.client_id).catch(e => { setBusy(false); setError(String(e.message)); }); }}>
+          <button className="btn primary" disabled={busy} onClick={() => { setBusy(true); goSignIn(auth.authority, auth.client_id).catch(e => { setBusy(false); setError(String(e.message)); }); }}>
             {busy ? 'Opening sign-in…' : 'Sign in'}
           </button>
-          <p className="muted small">
-            Secure sign-in by SpacetimeAuth. Krew keeps only your first name; your email and photo are never stored or
-            shared.
+          <p className="note">
+            <Icon name="lock" size={16} />
+            <span>Secure sign-in by SpacetimeAuth. Krew keeps only your first name; your email and photo are never stored or shared.</span>
           </p>
         </section>
       )}
-      {auth === undefined && <p className="muted">Loading sign-in…</p>}
+      {auth === undefined && <p className="muted center">Loading sign-in…</p>}
       {people.length > 0 && (
-        <section className="card">
-          <p className="label">Demo · who are you?</p>
-          <div className="row wrap">
+        <section className="card plain">
+          <CardHead eyebrow="Demo · who are you?" />
+          <div className="people">
             {people.map(p => (
-              <button key={p.id} className="secondary" disabled={busy} onClick={() => presenter(p.id)}>I'm {p.name}</button>
+              <button key={p.id} className="btn" disabled={busy} onClick={() => presenter(p.id)}>I'm {p.name}</button>
             ))}
           </div>
           <p className="muted small">Your agent already knows you, like a personal agent you've used for a while.</p>
         </section>
       )}
-      <details className="card" open={auth === null}>
-        <summary className="label">Just trying it out? Use the demo with a first name</summary>
+      <details className="card plain" open={auth === null}>
+        <summary>Just trying it out? Use the demo with a first name</summary>
         <form className="stack" onSubmit={demo}>
-          <input value={name} onChange={e => setName(e.target.value)} placeholder="Linh" required maxLength={40} aria-label="Your first name" />
-          <p className="muted small">Your agent starts with a sample profile, like one a real personal agent would already have.</p>
-          <button className="secondary" type="submit" disabled={busy}>Start the demo</button>
+          <input className="field" value={name} onChange={e => setName(e.target.value)} placeholder="Your first name" required maxLength={40} aria-label="Your first name" />
+          <p className="muted small">First name only. No photo. Your agent starts with a sample profile, like one a real personal agent would already have.</p>
+          <button className="btn primary" type="submit" disabled={busy || !name.trim()}>Start the demo</button>
         </form>
       </details>
+      <InstallHint />
       {error && <p className="error">{error}</p>}
     </main>
   );
+}
+
+// Seats for this group: you, the people in it (letters until everyone accepts), and the seats still open.
+function seatsFor(m: Match, me: string): Seat[] {
+  const size = Math.max(m.size ?? m.members.length, m.members.length);
+  const named = ['confirmed', 'playing', 'done'].includes(m.state);
+  const accepted = (p: string) => m.accepted.includes(p);
+  const you: Seat = accepted(me) && m.state !== 'inviting' ? { state: 'acc', name: 'You' } : { state: 'you' };
+  const others: Seat[] = m.members
+    .filter(p => p !== me)
+    .map(p => ({ state: accepted(p) ? 'acc' : 'in', name: named ? title(p) : undefined }));
+  const open: Seat[] = Array.from({ length: Math.max(0, size - m.members.length) }, () => ({ state: m.state === 'inviting' ? 'think' : 'open' }));
+  return [you, ...others, ...open];
 }
 
 function Chat({ agentId }: { agentId: string }) {
@@ -181,6 +240,12 @@ function Chat({ agentId }: { agentId: string }) {
   const [draft, setDraft] = useState('');
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState('');
+  const [lost, setLost] = useState(false); // polling the agent failed
+  const [tab, setTab] = useState<'chat' | 'flow'>('chat');
+  const [menu, setMenu] = useState(false);
+  const [size, setSize] = useState(0);
+  const [poke, setPoke] = useState(0); // "Try now" polls again straight away
+  const online = useOnline();
   const end = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -190,20 +255,23 @@ function Chat({ agentId }: { agentId: string }) {
         .then(s => {
           if (!live) return;
           setStatus(s);
-          setError('');
+          setLost(false);
           if (s.match?.state === 'playing') location.assign(`?match=${s.match.match_id}&agent=${agentId}`);
         })
-        .catch(e => live && setError(String(e.message)));
+        .catch(() => live && setLost(true));
     tick();
     const id = setInterval(tick, 1500);
     return () => {
       live = false;
       clearInterval(id);
     };
-  }, [agentId]);
+  }, [agentId, poke]);
 
   const lines = status?.transcript.length ?? 0;
-  useEffect(() => end.current?.scrollIntoView({ block: 'end' }), [lines, thinking]);
+  // Braces matter: newer browsers return a Promise from scrollIntoView, and React would call it as the cleanup.
+  useEffect(() => {
+    end.current?.scrollIntoView({ block: 'end' });
+  }, [lines, thinking, tab]);
 
   const run = (p: Promise<Status | unknown>) => {
     setError('');
@@ -227,124 +295,309 @@ function Chat({ agentId }: { agentId: string }) {
   if (!status) {
     return (
       <main className="app">
-        {error ? <p className="error">{error} · <button className="link" onClick={switchPerson}>sign in again</button></p> : <p className="muted">Waking up your agent…</p>}
+        {lost || !online ? (
+          <>
+            <Reconnecting offline={!online} onRetry={() => setPoke(n => n + 1)} />
+            <button className="link" onClick={switchPerson}>Sign in again</button>
+          </>
+        ) : (
+          <section className="conn">
+            <div className="avatar xl"><Pebble mood="thinking" size={164} /></div>
+            <h2>Waking up your agent…</h2>
+          </section>
+        )}
       </main>
     );
   }
 
   const m = status.match;
-  const seats = m ? m.size ?? m.members.length : 0;
-  // Others stay anonymous (Person A, B, ...) until everyone has accepted; then the challenge reveals names.
-  const named = !!m && ['confirmed', 'playing', 'done'].includes(m.state);
-  const others = m ? m.members.filter(p => p !== agentId) : [];
-  const who = (p: string) => (p === agentId ? 'You' : named ? title(p) : `Person ${String.fromCharCode(65 + others.indexOf(p))}`);
+  const accept = (yes: boolean) => run(call(AGENTS, `/users/${agentId}/accept`, { accept: yes }));
+  const leave = () => m && confirm('Leave this challenge?') && run(call(API, `/matches/${m.match_id}/leave`, { agent_id: agentId }));
 
   return (
     <main className="app chat">
-      <header>
-        <h1>Your agent</h1>
-        <span className="row">
-          <a className="pill" href={`?view=log&agent=${encodeURIComponent(agentId)}`} target="_blank">watch live ↗</a>
-          <button className="pill" onClick={switchPerson}>switch person</button>
-        </span>
+      <header className="topbar">
+        <div className="avatar"><Pebble size={50} /></div>
+        <div className="who"><b>Pebble</b><span>Your agent{status.name ? ` · ${status.name}` : ''}</span></div>
+        <button className="icon-btn" aria-label="Menu" aria-expanded={menu} onClick={() => setMenu(true)}><Icon name="menu" size={22} /></button>
       </header>
 
-      <InstallHint />
+      <div className="tabs" role="tablist" aria-label="Views">
+        <button role="tab" aria-selected={tab === 'chat'} onClick={() => setTab('chat')}>Chat</button>
+        <button role="tab" aria-selected={tab === 'flow'} onClick={() => setTab('flow')}>Flow</button>
+      </div>
 
-      <section className="transcript">
-        {status.transcript.map((line, i) => (
-          <p key={i} className={`bubble ${line.role}`}>{line.text}</p>
-        ))}
-        {thinking && <p className="bubble agent muted">…</p>}
-        <div ref={end} />
-      </section>
+      {(lost || !online) && (
+        <p className="note center">
+          <Icon name="clock" size={14} />
+          <span>{online ? 'Hmm, I lost the connection. Trying again…' : 'No signal right now. I’ll pick up where we left off.'}</span>
+        </p>
+      )}
 
-      {m && (
-        <section className="card">
-          <p className="label">
-            {m.host === agentId ? 'Your' : 'A'} {seats}-person challenge · {m.window}
-          </p>
-          <ul className="board">
-            {m.members.map(p => (
-              <li key={p} className={m.accepted.includes(p) ? 'here' : ''}>
-                <span>{who(p)}{p === m.host ? ' · host' : ''}</span>
-                <span>{m.accepted.includes(p) ? '✓ in' : '…'}</span>
-              </li>
+      {tab === 'flow' ? (
+        <Flow match={m} me={agentId} />
+      ) : (
+        <>
+          <section className="transcript" aria-live="polite">
+            {status.transcript.map((line, i) => (
+              <p key={i} className={`bubble ${line.role}`}>{line.text}</p>
             ))}
-            {Array.from({ length: Math.max(0, seats - m.members.length) }, (_, i) => (
-              <li key={`open-${i}`} className="open"><span>open seat</span><span>inviting…</span></li>
-            ))}
-          </ul>
-          {status.needs_accept && (
-            <div className="row">
-              <button className="primary" onClick={() => run(call(AGENTS, `/users/${agentId}/accept`, { accept: true }))}>Accept</button>
-              <button className="secondary" onClick={() => run(call(AGENTS, `/users/${agentId}/accept`, { accept: false }))}>Not now</button>
-            </div>
-          )}
-          {status.is_host && ['inviting', 'pending'].includes(m.state) && (
-            <div className="row">
-              {m.accepted.length >= SIZES[0] && m.accepted.length < seats && (
-                <button className="primary" onClick={() => run(call(API, `/challenges/${m.match_id}/start`, {}))}>
-                  Start now with {m.accepted.length}
-                </button>
+            {thinking && <p className="bubble typing" aria-label="Pebble is typing">•••</p>}
+            <div ref={end} />
+          </section>
+
+          {!status.consented ? (
+            <Consent shared={status.would_share} onShare={yes => run(call(AGENTS, `/users/${agentId}/consent`, { share: yes }))} />
+          ) : m ? (
+            <MatchCard
+              m={m}
+              me={agentId}
+              status={status}
+              onAccept={accept}
+              onStart={() => run(call(API, `/challenges/${m.match_id}/start`, {}))}
+              onCancel={() => run(call(API, `/challenges/${m.match_id}/cancel`, {}))}
+              onLeave={leave}
+            />
+          ) : (
+            <>
+              {status.last_match && (
+                <section className="card plain">
+                  <CardHead eyebrow="Your last challenge" title="How was it?" sub="Rate it privately and see who'd meet again." />
+                  <a className="btn" href={`?match=${status.last_match}&agent=${agentId}`}>Rate it</a>
+                </section>
               )}
-              <button className="secondary" onClick={() => run(call(API, `/challenges/${m.match_id}/cancel`, {}))}>Call it off</button>
-            </div>
+              <section className="card">
+                <CardHead eyebrow="New" title="Start a challenge" />
+                <p className="muted">How many people? Groups are 3 to 5.</p>
+                <div className="sizes" role="group" aria-label="Group size">
+                  {SIZES.map(n => (
+                    <button key={n} aria-pressed={size === n} onClick={() => setSize(n)}><b>{n}</b><span>people</span></button>
+                  ))}
+                </div>
+                <button
+                  className="btn primary"
+                  aria-disabled={!size}
+                  onClick={() => size && run(call(AGENTS, `/users/${agentId}/start`, { size }))}
+                >
+                  {size ? `Start a ${size}-person challenge` : 'Pick a size first'}
+                </button>
+                <p className="note center"><Icon name="lock" size={14} /><span>Strangers never meet one-on-one.</span></p>
+              </section>
+            </>
           )}
-          {m.state === 'confirmed' && <p className="muted">Everyone's in. Your agent is setting up the challenge…</p>}
-          {/* The host's way out before the start is Call it off; an invitation still waiting has Not now. */}
-          {!status.needs_accept && !(status.is_host && ['inviting', 'pending'].includes(m.state)) && (
-            <button
-              className="link"
-              onClick={() => confirm('Leave this challenge?') && run(call(API, `/matches/${m.match_id}/leave`, { agent_id: agentId }))}
-            >
-              Leave challenge
-            </button>
-          )}
-        </section>
-      )}
 
-      {!status.consented && (
-        <section className="card key">
-          <p className="label">Before I find you a group · OK to share?</p>
-          <p>I'll share only this with the coordinator, so it can match you:</p>
-          <ul className="shared">
-            <li>🕑 Free {status.would_share.free}</li>
-            <li>📍 {status.would_share.area}</li>
-            <li>🧩 Good at: {status.would_share.skills.join(', ') || 'not told me yet'}</li>
-            <li>✨ Into: {status.would_share.interests.join(', ') || 'not told me yet'}</li>
-          </ul>
-          <p className="muted small">No name, email or exact location. Everything else you tell me stays with me.</p>
-          <div className="row">
-            <button className="primary" onClick={() => run(call(AGENTS, `/users/${agentId}/consent`, { share: true }))}>Share</button>
-            <button className="secondary" onClick={() => run(call(AGENTS, `/users/${agentId}/consent`, { share: false }))}>Not now</button>
-          </div>
-        </section>
+          <form className="composer" onSubmit={send}>
+            <input value={draft} onChange={e => setDraft(e.target.value)} placeholder="Message Pebble…" maxLength={2000} aria-label="Message your agent" />
+            <button className="icon-btn" type="submit" aria-label="Send" disabled={thinking || !draft.trim()}><Icon name="send" size={22} /></button>
+          </form>
+        </>
       )}
-
-      {!m && status.last_match && (
-        <section className="card">
-          <p className="label">Your last challenge</p>
-          <a className="pill" href={`?match=${status.last_match}&agent=${agentId}`}>How was it? Rate it and see who'd meet again →</a>
-        </section>
-      )}
-
-      {!m && status.consented && (
-        <section className="card">
-          <p className="label">Start a challenge · how many people?</p>
-          <div className="row">
-            {SIZES.map(n => (
-              <button key={n} className="primary" onClick={() => run(call(AGENTS, `/users/${agentId}/start`, { size: n }))}>{n}</button>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <form className="composer" onSubmit={send}>
-        <input value={draft} onChange={e => setDraft(e.target.value)} placeholder="Message your agent…" maxLength={2000} />
-        <button className="primary" type="submit" disabled={thinking || !draft.trim()}>Send</button>
-      </form>
       {error && <p className="error">{error}</p>}
+
+      {menu && <Menu agentId={agentId} onClose={() => setMenu(false)} onSwitch={switchPerson} />}
     </main>
+  );
+}
+
+// "Before I share anything, I need your OK." Only rough info, and only after Share.
+function Consent({ shared, onShare }: { shared: Shared; onShare: (yes: boolean) => void }) {
+  const rows = [
+    ['Rough free time', shared.free],
+    ['Area, not exact spot', shared.area],
+    ['Interests', shared.interests.join(', ') || "You haven't told me yet"],
+    ['Good at', shared.skills.join(', ') || "You haven't told me yet"],
+  ];
+  return (
+    <section className="card">
+      <CardHead eyebrow="Before we start" title="OK to share?" />
+      <div className="share-rows">
+        {rows.map(([k, v]) => (
+          <div key={k} className="share-row">
+            <PieceIcon />
+            <div><span>{k}</span><b>{v}</b></div>
+          </div>
+        ))}
+      </div>
+      <p className="note">
+        <Icon name="lock" size={16} />
+        <span>No name, no exact location, no photo. Others see you as a letter until everyone says yes.</span>
+      </p>
+      <div className="btn-row">
+        <button className="btn" onClick={() => onShare(false)}>Not now</button>
+        <button className="btn primary wide" onClick={() => onShare(true)}>Share</button>
+      </div>
+    </section>
+  );
+}
+
+type MatchProps = {
+  m: Match; me: string; status: Status;
+  onAccept: (yes: boolean) => void; onStart: () => void; onCancel: () => void; onLeave: () => void;
+};
+
+// The one card for the challenge you're in: invitation, your group filling, your call, accept, locked in.
+function MatchCard({ m, me, status, onAccept, onStart, onCancel, onLeave }: MatchProps) {
+  const seats = Math.max(m.size ?? m.members.length, m.members.length);
+  const full = m.members.length >= seats;
+  const joined = m.members.length;
+  const seatList = seatsFor(m, me);
+  const meta = (
+    <div className="meta">
+      <div><Icon name="clock" /><span>{when(m.window)}</span></div>
+      <div><Icon name="pin" /><span>{m.area} · {seats} people</span></div>
+    </div>
+  );
+
+  // Invited: the Coordinator asks; nothing happens without your tap.
+  if (status.needs_accept && !status.is_host && !full) {
+    return (
+      <section className="card violet">
+        <div className="speaker">
+          <div className="avatar violet"><Walrus mood="sorry" size={52} /></div>
+          <div>
+            <span className="eyebrow violet">Coordinator</span>
+            <span>Hi! Sorry to bother you. Someone nearby is starting a challenge. Interested?</span>
+          </div>
+        </div>
+        <h2>A {seats}-person challenge nearby</h2>
+        {meta}
+        <div className="btn-row">
+          <button className="btn" onClick={() => onAccept(false)}>No</button>
+          <button className="btn primary wide" onClick={() => onAccept(true)}>Yes</button>
+        </div>
+      </section>
+    );
+  }
+
+  if (status.needs_accept) {
+    return (
+      <section className="card violet group">
+        <CardHead eyebrow="Seats filled" tone="violet" title="Your group is full" />
+        <Seats seats={seatList} />
+        {meta}
+        <div className="btn-row">
+          <button className="btn" onClick={() => onAccept(false)}>Not now</button>
+          <button className="btn primary wide" onClick={() => onAccept(true)}>Accept</button>
+        </div>
+      </section>
+    );
+  }
+
+  if (m.state === 'confirmed') {
+    return (
+      <section className="card violet group">
+        <CardHead eyebrow="Locked in" tone="green" title="Everyone's in!" />
+        <Seats seats={seatList} mood="cheer" tight />
+        {meta}
+        <p className="line-ok"><Icon name="checkCircle" size={20} /><span>Everyone's in! Setting up your challenge…</span></p>
+        <div className="progress"><div /></div>
+      </section>
+    );
+  }
+
+  if (m.state === 'playing') {
+    return (
+      <section className="card">
+        <CardHead eyebrow="Challenge" title="Opening your challenge…" />
+        <a className="btn primary" href={`?match=${m.match_id}&agent=${me}`}>Open challenge</a>
+      </section>
+    );
+  }
+
+  // The host decides: start with whoever accepted, or call it off.
+  const accepted = m.accepted.length;
+  if (status.is_host && accepted >= START_EARLY && accepted < seats) {
+    return (
+      <section className="card violet group">
+        <CardHead
+          eyebrow="Your call"
+          tone="violet"
+          title={`${accepted} of ${seats} joined.`}
+          sub={`Start with ${accepted}, or keep waiting for the rest.`}
+        />
+        <Seats seats={seatList} />
+        <button className="btn primary" onClick={onStart}>Start with {accepted}</button>
+        <p className="muted small center">Seats still open are dropped.</p>
+        <button className="btn" onClick={onCancel}>Call it off</button>
+      </section>
+    );
+  }
+
+  const others = m.members.filter(p => p !== me);
+  const waitingOnOthers = m.accepted.includes(me) && full;
+  return (
+    <section className="card violet group">
+      <div className="split-head">
+        <span className="eyebrow violet">Your group</span>
+        <b>{joined} of {seats} joined</b>
+      </div>
+      <Seats seats={seatList} />
+      {waitingOnOthers ? (
+        <>
+          <div className="marks">
+            {[me, ...others].map((p, i) => {
+              const ok = m.accepted.includes(p);
+              return (
+                <span key={p} className={`mark${ok ? ' ok' : ''}`}>
+                  <Icon name={ok ? 'check' : 'dots'} size={14} />{p === me ? 'You' : String.fromCharCode(64 + i)}
+                </span>
+              );
+            })}
+          </div>
+          <div className="status"><Icon name="clock" /><span>Waiting for the others…</span></div>
+        </>
+      ) : (
+        <p className="muted center">{m.state === 'inviting' ? 'Inviting the best fits nearby…' : 'Waiting for everyone to accept…'}</p>
+      )}
+      {status.is_host ? <button className="btn" onClick={onCancel}>Call it off</button> : <button className="link" onClick={onLeave}>Leave challenge</button>}
+    </section>
+  );
+}
+
+// Flow tab: your group as the Coordinator sees it. Every line runs to the walrus, never person to person.
+function Flow({ match, me }: { match: Match | null; me: string }) {
+  const note = !match
+    ? ['No challenge yet.', 'Start one from Chat and watch the Coordinator invite people here.']
+    : match.state === 'inviting'
+      ? ['Invites are out.', 'The Coordinator sends an invite down each line. Nobody can see anyone else.']
+      : match.state === 'pending'
+        ? ['Seats filled.', 'Everyone still has to accept. First names appear once they all do.']
+        : ['Everyone accepted.', 'Time to meet up and play.'];
+  return (
+    <>
+      <section className="card violet group">
+        {match ? <Seats seats={seatsFor(match, me)} mood={match.state === 'confirmed' ? 'cheer' : 'happy'} /> : <Seats seats={[{ state: 'you' }, { state: 'open' }, { state: 'open' }]} />}
+        <p className="center"><b>{note[0]}</b> <span className="muted">{note[1]}</span></p>
+        <div className="marks">
+          <span className="mark ok"><Icon name="check" size={14} />in</span>
+          <span className="mark"><Icon name="clock" size={14} />different time</span>
+          <span className="mark" style={{ color: 'var(--grey)' }}><Icon name="dots" size={14} />can't make it</span>
+        </div>
+      </section>
+      <div className="grow" />
+      <a className="watch" href={`?view=log&agent=${encodeURIComponent(me)}`} target="_blank"><Icon name="live" size={18} />Watch your group live ↗</a>
+    </>
+  );
+}
+
+function Menu({ agentId, onClose, onSwitch }: { agentId: string; onClose: () => void; onSwitch: () => void }) {
+  return (
+    <div className="sheet-backdrop" onClick={onClose}>
+      <section className="sheet" role="dialog" aria-label="Menu" onClick={e => e.stopPropagation()}>
+        <header className="topbar">
+          <h1>Privacy</h1>
+          <button className="icon-btn" aria-label="Close" onClick={onClose}><Icon name="close" size={20} /></button>
+        </header>
+        <p className="muted">Here is how we keep you safe, in plain words.</p>
+        <ol className="rules">
+          {PRIVACY_RULES.map(([t, body], i) => (
+            <li key={t}><span className="n">{i + 1}</span><div><b>{t}</b><span>{body}</span></div></li>
+          ))}
+        </ol>
+        <InstallHint />
+        <a className="btn" href={`?view=log&agent=${encodeURIComponent(agentId)}`} target="_blank"><Icon name="live" />Watch your group live ↗</a>
+        <button className="btn" onClick={onSwitch}>Switch person</button>
+      </section>
+    </div>
   );
 }

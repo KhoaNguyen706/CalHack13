@@ -50,22 +50,22 @@ export default function InstallHint() {
   const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
 
   return (
-    <section className="card install">
-      <p className="label">Put Krew on your home screen</p>
+    <section className="card plain install">
+      <p className="eyebrow">Put Krew on your home screen</p>
       {prompt ? (
         <button
-          className="primary"
+          className="btn primary"
           onClick={() => prompt.prompt().then(() => prompt.userChoice).then(c => c.outcome === 'accepted' && setHidden(true))}
         >
           Install app
         </button>
       ) : ios ? (
-        <ol className="steps">
+        <ol>
           <li>Tap the <b>Share</b> button <span aria-hidden="true">(the square with an arrow ⬆)</span> at the bottom of Safari</li>
           <li>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b></li>
         </ol>
       ) : (
-        <ol className="steps">
+        <ol>
           <li>Tap the browser menu <b>⋮</b> (top right in Chrome)</li>
           <li>Tap <b>Add to Home screen</b> or <b>Install app</b></li>
         </ol>

@@ -1,82 +1,81 @@
-"""Shapes the agents service shares with the coordinator. Mirrors coordinator/coordinator/models.py (the frozen
-interface) so the two services deploy separately."""
+"""Models for the agents service. The coordinator's own contract lives in coordinator/coordinator/models.py."""
 
-import re
-from typing import Literal, NamedTuple
+import time
+from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-_FREE_RE = re.compile(r"^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) (\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$")
-CHECKIN_FIELDS = {"agent_id", "free", "interests", "skills", "group_pref", "area"}
+from . import timeutil
 
-
-class Window(NamedTuple):
-    """A free-time window: day plus start/end in minutes since midnight."""
-
-    day: str
-    start: int
-    end: int
-
-    def __str__(self) -> str:
-        return f"{self.day} {self.start // 60:02d}:{self.start % 60:02d}-{self.end // 60:02d}:{self.end % 60:02d}"
-
-    @property
-    def minutes(self) -> int:
-        return self.end - self.start
+GroupPref = Literal["small", "any", "large"]
 
 
-def parse_free(text: str) -> Window:
-    """Parse "Sat 14:00-16:00" into a Window."""
-    m = _FREE_RE.match(text.strip())
-    if not m:
-        raise ValueError('free must look like "Sat 14:00-16:00"')
-    day, h1, m1, h2, m2 = m.groups()
-    start, end = int(h1) * 60 + int(m1), int(h2) * 60 + int(m2)
-    if not (0 <= start < end <= 24 * 60) or int(m1) > 59 or int(m2) > 59:
-        raise ValueError("free window must be a valid start < end time on one day")
-    return Window(day, start, end)
+class Profile(BaseModel):
+    """What a person's agent knows about them. Only the coarse fields are sent to the coordinator."""
 
-
-def shared(a: Window, b: Window) -> Window | None:
-    """The part of two windows that overlaps, if any."""
-    if a.day != b.day or min(a.end, b.end) <= max(a.start, b.start):
-        return None
-    return Window(a.day, max(a.start, b.start), min(a.end, b.end))
-
-
-class Persona(BaseModel):
-    """personas/<agent_id>.json: the coarse profile the coordinator sees, plus how this person's agent decides."""
-
-    agent_id: str = Field(pattern=r"^[a-z0-9_-]{1,32}$")
-    free: str
     interests: list[str] = []
     skills: list[str] = []
-    group_pref: Literal["small", "any", "large"] = "small"
-    area: str = Field(min_length=1, max_length=64)
-    # Agent-side only, never sent to the coordinator.
-    style: str = ""
-    max_minutes: int | None = Field(default=None, ge=60)
+    free: str | None = None  # "Sat 14:00-16:00"
+    group_pref: GroupPref = "small"
+    # Agent-side only, never sent to the coordinator:
+    about: str = ""  # bio and chat notes
+    style: str = ""  # one line on how this person decides
+    max_minutes: int | None = Field(default=None, ge=60)  # longest block they'll commit to
     open_to_invites: bool = True
 
     @field_validator("free")
     @classmethod
-    def _check_free(cls, v: str) -> str:
-        return str(parse_free(v))
+    def _check_free(cls, v: str | None) -> str | None:
+        return None if v is None else str(timeutil.parse(v))
+
+
+class PersonalContext(BaseModel):
+    """Fake personal information that a real personal agent (Muse, Grok bot, ...) would already have.
+
+    Our sample chatbot knows nothing about the person using it, so it borrows one of these for matching.
+    An unclaimed one can also run on its own as a stand-in agent (rehearsals with fewer real people).
+    """
+
+    id: str
+    free: str
+    interests: list[str] = []
+    skills: list[str] = []
+    group_pref: GroupPref = "small"
+    area: str | None = None  # None = the event's area
+    max_minutes: int | None = Field(default=None, ge=60)
+    open_to_invites: bool = True
+    style: str = ""
+    bio: str
+    memories: list[str] = []
 
     @property
-    def window(self) -> Window:
-        return parse_free(self.free)
+    def profile(self) -> Profile:
+        keep = {"interests", "skills", "free", "group_pref", "style", "max_minutes", "open_to_invites"}
+        return Profile(**self.model_dump(include=keep), about=self.bio)
 
-    def checkin(self, callback_url: str | None = None) -> dict:
-        """POST /agents/checkin body: coarse fields only."""
-        body = self.model_dump(include=CHECKIN_FIELDS)
-        if callback_url:
-            body["callback_url"] = callback_url
-        return body
+
+class ChatLine(BaseModel):
+    role: Literal["user", "agent", "update"]  # update = news from the coordinator
+    text: str
+    ts: float = Field(default_factory=time.time)
+
+
+class User(BaseModel):
+    """A real person, signed in through SpacetimeDB, and the sample chatbot standing in for their personal agent."""
+
+    agent_id: str
+    identity: str
+    name: str
+    context_id: str | None = None  # the personal context their agent uses
+    profile: Profile = Profile()
+    transcript: list[ChatLine] = []  # what the chat page shows
+    convo: list[dict] = []  # Claude messages, append-only: thinking blocks must come back unchanged
+    inbox: list[str] = []  # coordinator news Claude hasn't seen yet; goes in front of the next message
+    notified: list[str] = []  # "<match_id>:<event>" already announced
 
 
 class Question(BaseModel):
-    """What the coordinator's broker POSTs to an agent's callback_url."""
+    """What the coordinator POSTs to an agent's callback_url."""
 
     question_id: str
     agent_id: str
@@ -84,9 +83,57 @@ class Question(BaseModel):
     plan: dict | None = None
 
 
-class Reply(BaseModel):
-    """The answer, returned in the callback's response body. A counter carries a new free window."""
+class Answer(BaseModel):
+    """Our reply in the callback's response body. `note` is the agent's reason for the log."""
 
     answer: Literal["yes", "no", "counter"]
     free: str | None = None
-    note: str | None = None
+    note: str = ""
+
+
+class Login(BaseModel):
+    identity: str = Field(min_length=1, max_length=200)  # SpacetimeDB identity
+    name: str = Field(min_length=1, max_length=40)
+    context_id: str | None = None  # a sample personal context to use; omitted = the next free one
+
+
+class Start(BaseModel):
+    """Start a challenge: the person who starts it picks how many people play. At least 3: strangers never meet
+    one on one (a safety point of the pitch)."""
+
+    size: int = Field(3, ge=3, le=5)
+
+
+class ChatIn(BaseModel):
+    message: str = Field(min_length=1, max_length=2000)
+
+
+class Decision(BaseModel):
+    accept: bool = True
+
+
+class PhotoCheck(BaseModel):
+    """One photo for one step of a challenge. Send a public URL (uploaded to storage) or the image itself."""
+
+    step: str  # "s1", "s2", ...
+    agent_id: str | None = None
+    image_url: str | None = None
+    image_base64: str | None = None
+    media_type: Literal["image/jpeg", "image/png", "image/webp", "image/gif"] = "image/jpeg"
+
+    @model_validator(mode="after")
+    def _one_image(self) -> "PhotoCheck":
+        if bool(self.image_url) == bool(self.image_base64):
+            raise ValueError("send exactly one of image_url or image_base64")
+        return self
+
+
+class Feedback(BaseModel):
+    """End screen: rate the challenge, meet again?, OK to share the photo?"""
+
+    match_id: str
+    agent_id: str
+    rating: int = Field(ge=1, le=5)
+    meet_again: bool
+    share_ok: bool = False
+    comment: str = Field("", max_length=500)

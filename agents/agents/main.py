@@ -1,7 +1,8 @@
-"""Agents service: the personal agents behind the coordinator. Run: uvicorn agents.main:app --port 8100"""
+"""HTTP surface of the agents service. Run: uvicorn agents.main:app --port 8100 --reload"""
 
-import os
-from collections import Counter
+import asyncio
+import json
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -9,85 +10,214 @@ import anthropic
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import ValidationError
 
-from . import personas as persona_store
-from . import sponsors
-from .designer import ChallengeRequest, design
-from .models import Persona, Question, Reply
-from .persona_agent import decide
+from . import chat, llm, sponsors, timeutil
+from .config import Settings
+from .coordinator_client import CoordinatorClient, CoordinatorError
+from .memory import Memory
+from .models import Answer, ChatIn, ChatLine, Decision, Feedback, Login, PersonalContext, PhotoCheck, Question, Start
+from .place import Place, PlaceService
+from .service import AgentsService, Conflict, NotFound
+from .store import Store
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+SEEDS = Path(__file__).parent.parent / "seeds" / "personal_contexts.json"
 
 
-def make_claude() -> anthropic.AsyncAnthropic | None:
-    if os.environ.get("AGENT_WITH_CLAUDE", "1") == "0":
-        return None
-    try:
-        # Each caller caps its own wait (persona answers 12 s, challenge design 40 s).
-        return anthropic.AsyncAnthropic(timeout=45.0, max_retries=0)
-    except anthropic.AnthropicError:  # no credentials: agents decide with rules
-        return None
+def load_contexts(path: Path = SEEDS) -> list[PersonalContext]:
+    return [PersonalContext.model_validate(c) for c in json.loads(path.read_text(encoding="utf-8"))]
 
 
 def create_app(
-    personas_dir: Path = persona_store.PERSONAS_DIR,
-    data_dir: Path = sponsors.DATA_DIR,
-    coordinator_url: str = os.environ.get("COORDINATOR_URL", "http://localhost:8000"),
-    # How the coordinator reaches this service (http://agents:8100 inside Docker Compose).
-    public_url: str = os.environ.get("AGENTS_PUBLIC_URL", "http://localhost:8100"),
+    settings: Settings | None = None,
     claude: anthropic.AsyncAnthropic | None = None,
-    use_claude: bool = True,
-    transport: httpx.AsyncBaseTransport | None = None,
+    coordinator_transport: httpx.AsyncBaseTransport | None = None,
+    web_transport: httpx.AsyncBaseTransport | None = None,
+    watch: bool = True,
 ) -> FastAPI:
+    s = settings or Settings()
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        async with httpx.AsyncClient(base_url=coordinator_url, transport=transport, timeout=10) as http:
-            app.state.http = http
-            app.state.claude = claude or (make_claude() if use_claude else None)
-            app.state.personas = persona_store.load(personas_dir)
-            app.state.booths = sponsors.load_booths(data_dir)
-            app.state.sponsors = sponsors.load_sponsors(data_dir)
-            app.state.booth_uses = Counter()  # spreads groups across booths
+        async with (
+            httpx.AsyncClient(base_url=s.coordinator_url, transport=coordinator_transport) as coord_http,
+            httpx.AsyncClient(transport=web_transport) as web,
+        ):
+            store = Store(s.db_path)
+            memory = Memory(store, s.moss_project_id, s.moss_project_key, s.moss_index)
+            await memory.start()
+            claude_client = claude or llm.make_claude(s.use_claude)
+            place = PlaceService(s, web, claude_client)
+            svc = AgentsService(
+                s, store, memory, CoordinatorClient(coord_http), claude_client, place, load_contexts(),
+                sponsors.load_booths(), sponsors.load_sponsors(),
+            )
+            app.state.svc = svc
+            tasks = [asyncio.create_task(svc.watch())] if watch else []
+            if s.apify_token:
+                place.refresh(timeutil.now(s.tz))  # warm the cache so the first group gets scraped facts
             yield
+            for t in tasks:
+                t.cancel()
+            await memory.close()
 
-    app = FastAPI(title="Agents", lifespan=lifespan)
+    app = FastAPI(title="Agents and AI", lifespan=lifespan)
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-    def persona_or_404(agent_id: str) -> Persona:
-        persona = app.state.personas.get(agent_id)
-        if persona is None:
-            raise HTTPException(404, f"unknown persona {agent_id}")
-        return persona
+    def svc() -> AgentsService:
+        return app.state.svc
+
+    async def guarded(coro):
+        try:
+            return await coro
+        except NotFound as e:
+            raise HTTPException(404, str(e))
+        except Conflict as e:
+            raise HTTPException(409, str(e))
+        except CoordinatorError as e:
+            raise HTTPException(e.status if e.status < 500 else 502, e.detail)
+        except (ValueError, ValidationError) as e:
+            raise HTTPException(422, str(e))
+
+    def user_or_404(agent_id: str):
+        try:
+            return svc().user(agent_id)
+        except NotFound as e:
+            raise HTTPException(404, str(e))
 
     @app.get("/health")
     async def health() -> dict:
-        return {"ok": True, "personas": len(app.state.personas), "claude": app.state.claude is not None}
+        v = svc()
+        return {
+            "ok": True,
+            "users": len(v.store.users),
+            "personal_contexts": len(v.contexts),
+            "claude": v.claude is not None,
+            "moss": v.memory.ready,
+            "apify": bool(s.apify_token),
+        }
 
-    # --- persona agents ----------------------------------------------------------
+    # --- the sample chatbot: real people -----------------------------------------
 
-    @app.get("/personas")
-    async def list_personas() -> list[Persona]:
-        return list(app.state.personas.values())
+    @app.post("/users/login")
+    async def login(body: Login) -> dict:
+        """After SpacetimeDB sign-in: get this person's agent, loaded with a personal context (picked or the next free one)."""
+        try:
+            user = svc().login(body)
+        except NotFound as e:
+            raise HTTPException(404, str(e))
+        except Conflict as e:
+            raise HTTPException(409, str(e))
+        return await svc().status(user)
 
-    @app.post("/personas/checkin-all")
-    async def checkin_all() -> dict:
-        """Check every persona in with the coordinator. Their agents then answer its asks through /ask."""
-        for p in app.state.personas.values():
-            resp = await app.state.http.post("/agents/checkin", json=p.checkin(f"{public_url}/personas/{p.agent_id}/ask"))
-            if resp.is_error:
-                raise HTTPException(502, f"coordinator rejected {p.agent_id}: {resp.text}")
-        return {"checked_in": len(app.state.personas)}
+    @app.get("/users/{agent_id}")
+    async def status(agent_id: str) -> dict:
+        """Poll this from the chat and game pages: transcript, match, needs_accept, challenge, my_part, progress."""
+        return await guarded(svc().status(user_or_404(agent_id)))
 
-    @app.post("/personas/{agent_id}/ask", response_model_exclude_none=True)
-    async def ask(agent_id: str, body: Question) -> Reply:
-        """The coordinator's callback: answer yes / no / counter in the response body."""
-        return await decide(persona_or_404(agent_id), body, app.state.claude)
+    @app.post("/users/{agent_id}/start")
+    async def start(agent_id: str, body: Start | None = None) -> dict:
+        """The Start button: start a challenge for `size` people (3-5, default 3). The coordinator invites the rest."""
+        user = user_or_404(agent_id)
+        async with svc().lock(agent_id):
+            await guarded(svc().start(user, (body or Start()).size))
+        return await svc().status(user)
 
-    # --- challenge designer ------------------------------------------------------
+    @app.post("/users/{agent_id}/accept")
+    async def accept(agent_id: str, body: Decision) -> dict:
+        """Accept or decline an invitation."""
+        user = user_or_404(agent_id)
+        await guarded(svc().respond(user, body.accept))
+        return await svc().status(user)
+
+    @app.post("/chat/{agent_id}")
+    async def chat_turn(agent_id: str, body: ChatIn) -> dict:
+        user = user_or_404(agent_id)
+        async with svc().lock(agent_id):
+            user.transcript.append(ChatLine(role="user", text=body.message))
+            try:
+                text = await chat.reply(svc(), user, body.message)
+            except anthropic.APIError as e:
+                logging.getLogger(__name__).warning("chat failed for %s: %s", agent_id, e)
+                text = "Sorry, I lost my train of thought. Try again, or tap Start to begin a challenge."
+            user.transcript.append(ChatLine(role="agent", text=text))
+            svc().store.save_user(user)
+        return {"reply": text, **(await svc().status(user))}
+
+    # --- challenges: photo checks --------------------------------------------------
+
+    @app.post("/challenges/{match_id}/check")
+    async def check_photo(match_id: str, body: PhotoCheck) -> dict:
+        """One photo for one step. Returns passed + a friendly reason, and the whole progress."""
+        return await guarded(svc().check_photo(match_id, body))
+
+    @app.get("/challenges/{match_id}/progress")
+    async def progress(match_id: str) -> dict:
+        return await guarded(svc().progress_view(match_id))
+
+    # --- the coordinator calls these ---------------------------------------------
+
+    @app.post("/agents/{agent_id}/question")
+    async def question(agent_id: str, body: Question) -> Answer:
+        """callback_url for every agent we run. Answers the coordinator's invitation in the response body."""
+        return await svc().answer(body.model_copy(update={"agent_id": agent_id}))
 
     @app.post("/challenge")
-    async def challenge(body: ChallengeRequest) -> dict:
-        """CHALLENGE_DESIGNER_URL: the split_riddle round for a confirmed group."""
-        s = app.state
-        return await design(body, s.booths, s.sponsors, s.claude, s.booth_uses)
+    async def challenge(body: dict) -> dict:
+        """CHALLENGE_DESIGNER_URL. Body: {"match", "members"}; returns the invented challenge."""
+        return await svc().design(body)
+
+    # --- personal contexts, feedback, place --------------------------------------
+
+    @app.get("/contexts")
+    async def contexts() -> list[dict]:
+        """Sample personal contexts, for a picker at sign-in. taken_by = who's using it."""
+        return svc().contexts_view()
+
+    @app.post("/contexts/seed")
+    async def seed(shift_to_now: bool = False) -> dict:
+        """Rehearsals: check unclaimed contexts in as stand-in agents. shift_to_now moves Saturday windows to today."""
+        return await guarded(svc().seed_stand_ins(shift_to_now))
+
+    # Paths from the first agents service, kept so main's README commands and old callbacks still work.
+
+    @app.get("/personas")
+    async def personas() -> list[dict]:
+        return svc().contexts_view()
+
+    @app.post("/personas/checkin-all")
+    async def checkin_all(shift_to_now: bool = False) -> dict:
+        return await guarded(svc().seed_stand_ins(shift_to_now))
+
+    @app.post("/personas/{agent_id}/ask")
+    async def ask(agent_id: str, body: Question) -> Answer:
+        return await svc().answer(body.model_copy(update={"agent_id": agent_id}))
+
+    @app.post("/feedback")
+    async def feedback(body: Feedback) -> dict:
+        return await svc().feedback(body)
+
+    @app.get("/feedback/{match_id}")
+    async def feedback_summary(match_id: str, agent_id: str | None = None) -> dict:
+        return await svc().feedback_view(match_id, agent_id)
+
+    @app.get("/stats")
+    async def stats() -> dict:
+        """ "X of Y groups wanted to meet again" for the video and the end screen."""
+        return svc().stats()
+
+    @app.get("/place")
+    async def place() -> Place:
+        return await svc().place.get(timeutil.now(s.tz))
+
+    @app.post("/place/refresh")
+    async def place_refresh() -> Place:
+        """Scrape now (Apify) and wait for it, up to 90 s."""
+        try:
+            return await asyncio.wait_for(asyncio.shield(svc().place.refresh(timeutil.now(s.tz))), 90)
+        except Exception as e:
+            raise HTTPException(502, f"refresh failed: {e!r}")
 
     return app
 

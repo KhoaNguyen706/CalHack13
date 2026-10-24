@@ -9,7 +9,7 @@
     "verified": true,
     "hint": "This sponsor's tool helps you scrape the web.",
     "question": "Ask them: what's the coolest thing someone built with your tool?",
-    "area": "UC Berkeley",
+    "area": "Palace of Fine Arts",
     "location": "near the snacks"
   },
   {
@@ -22,7 +22,7 @@
     "verified": false,
     "hint": "This sponsor makes an AI you can chat with and build agents on.",
     "question": "Ask them: what's one thing their AI is surprisingly good at?",
-    "area": "UC Berkeley",
+    "area": "Palace of Fine Arts",
     "location": "next to the main stage"
   },
   {
@@ -37,7 +37,7 @@
     "verified": false,
     "hint": "This sponsor's database is also the server, so every player sees changes live.",
     "question": "Ask them: what's the biggest multiplayer world running on it?",
-    "area": "UC Berkeley",
+    "area": "Palace of Fine Arts",
     "location": "by the registration desk"
   },
   {
@@ -50,7 +50,7 @@
     "verified": false,
     "hint": "This sponsor turns text into natural-sounding voice in real time.",
     "question": "Ask them: can their voices sound excited, and can you hear a demo?",
-    "area": "UC Berkeley",
+    "area": "Palace of Fine Arts",
     "location": "near the charging station"
   }
 ]

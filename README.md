@@ -6,7 +6,7 @@ cooperative challenge they can only win together. Design: `Cal Hacks 13 — AI C
 | Folder | What |
 | --- | --- |
 | `coordinator/` | Python coordinator: gateway, broker, matching, approval, negotiation log, MCP adapter |
-| `agents/` | Personal agents (yes / no / counter) and the Claude challenge designer |
+| `agents/` | Sample personal agents (chatbot + personal contexts), the AI challenge designer, photo checks |
 | `game/` | SpacetimeDB live game (module + phone game page) |
 
 ## Run everything (any OS, Docker)
@@ -14,7 +14,7 @@ cooperative challenge they can only win together. Design: `Cal Hacks 13 — AI C
 Needs Docker Desktop (or Docker Engine + Compose).
 
 ```bash
-cp .env.example .env     # add ANTHROPIC_API_KEY (ask a teammate); .env is never committed
+cp .env.example .env     # add ANTHROPIC_API_KEY (+ APIFY_TOKEN, MOSS_* if you have them); .env is never committed
 docker compose up --build
 ```
 
@@ -40,8 +40,9 @@ Try the demo with the seeded personas (default `GROUP_SIZE=3`):
 ```bash
 curl -X POST localhost:8100/personas/checkin-all  # live persona agents (or localhost:8000/demo/seed: auto-yes)
 curl -X POST localhost:8000/matching/run          # note the match_id of linh/marcus/priya
-curl -X POST localhost:8000/matches/<id>/accept -H 'Content-Type: application/json' -d '{"agent_id":"linh"}'
-#  …same for marcus and priya → round goes live
+# The personas' agents accept on their own a few seconds later → round goes live.
+# To accept by hand instead, run with STAND_IN_AUTO_ACCEPT=0 and:
+# curl -X POST localhost:8000/matches/<id>/accept -H 'Content-Type: application/json' -d '{"agent_id":"linh"}'
 ```
 
 Open the game page three times (`agent=linh`, `agent=marcus`, `agent=priya`), tap "We're here" on each,
@@ -77,7 +78,13 @@ spacetime login show --token         # copy: the coordinator needs it to start r
 Check `https://<railway-domain>/health` shows `"claude": true, "spacetime": true`. Run one instance only:
 open questions live in memory.
 
-**3. Web app on Vercel.** New project → import the repo → root directory `game` (Vite is detected). Set before the
+**3. Agents on Railway.** Same project → New service from the repo → root directory `agents` (Dockerfile). Add a
+volume at `/data`, generate a public domain, and set `ANTHROPIC_API_KEY`, `APIFY_TOKEN`, `MOSS_PROJECT_ID`,
+`MOSS_PROJECT_KEY`, `COORDINATOR_URL=https://<coordinator-domain>`, `AGENTS_PUBLIC_URL=https://<agents-domain>`,
+`AGENTS_DB=/data/agents.db`, `AGENTS_CACHE=/data/cache`. Then set `CHALLENGE_DESIGNER_URL=https://<agents-domain>/challenge`
+on the coordinator.
+
+**4. Web app on Vercel.** New project → import the repo → root directory `game` (Vite is detected). Set before the
 first build (Vite bakes them in; redeploy after changing them):
 
 | Variable | Value |

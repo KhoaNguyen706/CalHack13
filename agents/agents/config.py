@@ -41,6 +41,8 @@ class Settings:
     area: str = _env("EVENT_AREA", "Palace of Fine Arts")
     tz: str = _env("EVENT_TZ", "America/Los_Angeles")
 
+    # Sign in with Google (an OAuth web client id; it's public). Unset: only the name sign-in works.
+    google_client_id: str = _env("GOOGLE_CLIENT_ID")
     apify_token: str = _env("APIFY_TOKEN")
     moss_project_id: str = _env("MOSS_PROJECT_ID")
     moss_project_key: str = _env("MOSS_PROJECT_KEY")

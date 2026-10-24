@@ -72,6 +72,8 @@ class User(BaseModel):
     transcript: list[ChatLine] = []  # what the chat page shows
     convo: list[dict] = []  # Claude messages, append-only: thinking blocks must come back unchanged
     inbox: list[str] = []  # coordinator news Claude hasn't seen yet; goes in front of the next message
+    # Nothing reaches the coordinator until they tap Share on the card listing exactly what it gets.
+    consented: bool = False
     notified: list[str] = []  # "<match_id>:<event>" already announced
 
 
@@ -113,6 +115,18 @@ class Start(BaseModel):
         if v < MIN_GROUP_SIZE:
             raise ValueError(f"size must be at least {MIN_GROUP_SIZE}")
         return v
+
+
+class GoogleLogin(BaseModel):
+    """POST /users/google: the ID token from Sign in with Google."""
+
+    credential: str = Field(min_length=1, max_length=8000)
+
+
+class Consent(BaseModel):
+    """POST /users/{id}/consent"""
+
+    share: bool = True
 
 
 class ChatIn(BaseModel):

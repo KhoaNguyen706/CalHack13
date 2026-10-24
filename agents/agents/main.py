@@ -14,11 +14,11 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
-from . import chat, llm, sponsors, timeutil
+from . import chat, google, llm, sponsors, timeutil
 from .config import Settings
 from .coordinator_client import CoordinatorClient, CoordinatorError
 from .memory import Memory
-from .models import Answer, ChatIn, ChatLine, Decision, Feedback, Login, PersonalContext, PhotoCheck, PhotoUpload, Question, Start
+from .models import Answer, ChatIn, ChatLine, Consent, Decision, GoogleLogin, Feedback, Login, PersonalContext, PhotoCheck, PhotoUpload, Question, Start
 from .place import Place, PlaceService
 from .service import AgentsService, Conflict, NotFound
 from .store import Store
@@ -59,6 +59,7 @@ def create_app(
                 sponsors.load_booths(), sponsors.load_sponsors(),
             )
             app.state.svc = svc
+            app.state.web = web
             tasks = [asyncio.create_task(svc.watch())] if watch else []
             if s.apify_token:
                 place.refresh(timeutil.now(s.tz))  # warm the cache so the first group gets scraped facts
@@ -114,6 +115,27 @@ def create_app(
             raise HTTPException(404, str(e))
         except Conflict as e:
             raise HTTPException(409, str(e))
+        return await svc().status(user)
+
+    @app.get("/auth/config")
+    async def auth_config() -> dict:
+        """What the sign-in page needs: the Google client id (public), or none for name-only sign-in."""
+        return {"google_client_id": s.google_client_id or None}
+
+    @app.post("/users/google")
+    async def login_google(body: GoogleLogin) -> dict:
+        """Sign in with Google. Keeps the account id and first name only; email and photo are dropped here."""
+        try:
+            person = await google.verify(app.state.web, body.credential, s.google_client_id)
+        except google.InvalidToken as e:
+            raise HTTPException(401, str(e))
+        return await svc().status(svc().login_google(person))
+
+    @app.post("/users/{agent_id}/consent")
+    async def consent(agent_id: str, body: Consent) -> dict:
+        """Share = check in with the coordinator (coarse fields only); Not now = stay private."""
+        user = user_or_404(agent_id)
+        await guarded(svc().consent(user, body.share))
         return await svc().status(user)
 
     @app.get("/users/{agent_id}")

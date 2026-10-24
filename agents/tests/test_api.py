@@ -92,8 +92,12 @@ def wait_for(fn, timeout=6.0):
     raise AssertionError("condition not met")
 
 
-def login(client, name="Phong", identity="id-phong", context_id=None):
-    return client.post("/users/login", json={"identity": identity, "name": name, "context_id": context_id})
+def login(client, name="Phong", identity="id-phong", context_id=None, share=True):
+    """Sign in, then tap Share on the consent card (share=False leaves them private)."""
+    resp = client.post("/users/login", json={"identity": identity, "name": name, "context_id": context_id})
+    if share and resp.status_code == 200:
+        client.post(f"/users/{resp.json()['agent_id']}/consent", json={"share": True})
+    return resp
 
 
 def lines(client, agent_id):
@@ -255,3 +259,41 @@ def test_group_photo_upload_and_serve(client):
     bad = {"match_id": "m1", "image_base64": base64.b64encode(b"not an image").decode()}
     assert client.post("/photos", json=bad).status_code == 422
     assert client.get("/photos/nope").status_code == 404
+
+
+def test_nothing_is_shared_until_they_tap_share(client, coord):
+    me = login(client, share=False).json()
+    assert not me["consented"] and not me["checked_in"] and "phong" not in coord.agents
+    assert me["would_share"]["area"] == "Palace of Fine Arts" and "puzzles" in me["would_share"]["interests"]
+    assert client.post("/users/phong/start", json={"size": 2}).status_code == 409  # can't play before sharing
+    client.post("/users/phong/consent", json={"share": False})
+    assert "phong" not in coord.agents and "won't share anything" in lines(client, "phong")[-1]
+
+    shared = client.post("/users/phong/consent", json={"share": True}).json()
+    assert shared["consented"] and set(coord.agents["phong"]) >= {"free", "area", "interests", "skills"}
+    assert "about" not in coord.agents["phong"] and "name" not in coord.agents["phong"]  # coarse fields only
+
+
+def test_google_sign_in_keeps_only_the_first_name(coord, tmp_path):
+    def google(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == "oauth2.googleapis.com" and request.url.params["id_token"] in ("good", "other-app")
+        aud = "krew-client" if request.url.params["id_token"] == "good" else "someone-else"
+        claims = {"aud": aud, "iss": "https://accounts.google.com", "exp": str(int(time.time()) + 600), "sub": "1234",
+                  "given_name": "Minh", "name": "Minh Tran", "email": "minh@example.com", "picture": "https://x/p.jpg"}
+        return httpx.Response(200, json=claims)
+
+    settings = Settings(
+        coordinator_url="http://coordinator", public_url="http://agents", db_path=":memory:", cache_dir=tmp_path,
+        use_claude=False, apify_token="", moss_project_id="", moss_project_key="", google_client_id="krew-client",
+    )
+    app = create_app(settings, coordinator_transport=httpx.MockTransport(coord), web_transport=httpx.MockTransport(google), watch=False)
+    with TestClient(app) as client:
+        assert client.get("/auth/config").json() == {"google_client_id": "krew-client"}
+        me = client.post("/users/google", json={"credential": "good"}).json()
+        assert me["name"] == "Minh" and me["agent_id"] == "minh" and me["context_id"] is None
+        assert me["profile"]["interests"] == [] and "what are you into" in me["transcript"][0]["text"]
+        stored = client.app.state.svc.store.users["minh"].model_dump_json()
+        assert "minh@example.com" not in stored and "Tran" not in stored and "p.jpg" not in stored
+        assert client.post("/users/google", json={"credential": "good"}).json()["agent_id"] == "minh"  # same person
+        assert client.post("/users/google", json={"credential": "other-app"}).status_code == 401
+        assert not coord.agents  # signing in shares nothing

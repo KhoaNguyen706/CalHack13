@@ -12,6 +12,7 @@ from . import designer, personal, timeutil, vision
 from .config import Settings
 from .coordinator_client import CoordinatorClient, CoordinatorError
 from .memory import Memory
+from .google import GoogleUser
 from .models import Answer, ChatLine, Feedback, Login, PersonalContext, PhotoCheck, Profile, Question, User
 from .place import PlaceService
 from .sponsors import Booth, SponsorInfo
@@ -20,8 +21,13 @@ from .store import Store
 log = logging.getLogger(__name__)
 
 GREETING = (
-    "Hi {name}! I'm your agent. Want to do a quick outdoor challenge with people nearby? "
-    "Tell me how many people (2 to 5), or tap Start."
+    "Hi {name}! I'm your agent. I find you a few people nearby for a quick outdoor challenge. "
+    "First, check what I'd share about you on the card below. Nothing leaves until you tap Share."
+)
+# Signed in with Google: we know only their first name, so the agent asks the basics itself.
+NEW_PERSON_GREETING = (
+    "Hi {name}! I'm your agent. I find you a few people nearby for a quick outdoor challenge. "
+    "A few quick questions so I can pick good matches: what are you into, and what are you good at?"
 )
 # Sample contexts' free windows are written around a 14:00 demo start; shift_to_now moves that start to now.
 DEMO_START_MIN = 14 * 60
@@ -116,27 +122,44 @@ class AgentsService:
         """SpacetimeDB identity -> our sample agent, loaded with a personal context. Same identity, same agent."""
         if user := self.store.user_by_identity(body.identity):
             return user
-        context = self._pick_context(body.context_id)
-        base = slug_id(body.name)
+        return self._new_user(body.identity, body.name, self._pick_context(body.context_id))
+
+    def login_google(self, google: GoogleUser) -> User:
+        """A real person: no sample context. Their agent asks for interests, skills and free time in the chat."""
+        identity = f"google:{google.sub}"
+        return self.store.user_by_identity(identity) or self._new_user(identity, google.first_name, None)
+
+    def _new_user(self, identity: str, display_name: str, context: PersonalContext | None) -> User:
+        base = slug_id(display_name)
         agent_id, n = base, 2
         while agent_id in self.store.users or agent_id in self.contexts:
             agent_id, n = f"{base}-{n}", n + 1
-        display = body.name.strip()
+        display = display_name.strip()
+        greeting = GREETING if context else NEW_PERSON_GREETING
         user = User(
             agent_id=agent_id,
-            identity=body.identity,
+            identity=identity,
             name=display,
             context_id=context.id if context else None,
             # The context's free window is sample data; a person is free from whenever they start.
             profile=context.profile.model_copy(update={"free": None}) if context else Profile(),
-            transcript=[ChatLine(role="agent", text=GREETING.format(name=display))],
+            transcript=[ChatLine(role="agent", text=greeting.format(name=display))],
         )
         self.store.save_user(user)
         if context and context.memories:
             items = [(f"{agent_id}-ctx-{i}", agent_id, "context", text) for i, text in enumerate(context.memories)]
             self._spawn(self.memory.remember_many(items))
-        self._spawn(self._quiet_check_in(user))  # like a real personal agent: available, so others can invite them
         return user
+
+    async def consent(self, user: User, share: bool) -> None:
+        """Share (check in with the coordinator, so others can invite them) or keep everything private."""
+        user.consented = share
+        self.store.save_user(user)
+        if share:
+            await self.check_in(user)
+            self.notify(user.agent_id, None, "Thanks! I shared only what's on the card. Tap a group size when you want to play.")
+        else:
+            self.notify(user.agent_id, None, "No problem, I won't share anything. Tap Share whenever you're ready.")
 
     def _pick_context(self, context_id: str | None) -> PersonalContext | None:
         claimed = {u.context_id for u in self.store.users.values()}
@@ -177,8 +200,9 @@ class AgentsService:
         agent = match = None
         try:
             agent = await self.coordinator.agent(user.agent_id)
-            if agent is None:  # e.g. the coordinator restarted: check back in
-                self._spawn(self._quiet_check_in(user))
+            if agent is None:
+                if user.consented:  # e.g. the coordinator restarted: check back in
+                    self._spawn(self._quiet_check_in(user))
             elif agent.get("match_id"):
                 match = await self.coordinator.match(agent["match_id"])
         except CoordinatorError as e:
@@ -192,6 +216,8 @@ class AgentsService:
             "profile": user.profile.model_dump(),
             "transcript": [line.model_dump() for line in user.transcript],
             "checked_in": agent is not None,
+            "consented": user.consented,
+            "would_share": self.would_share(user),
             "match": {**match, "challenge": None} if match else None,
             "is_host": bool(match and match.get("host") == me),
             "needs_accept": bool(match and match["state"] in ("inviting", "pending") and me not in match["accepted"]),
@@ -212,19 +238,28 @@ class AgentsService:
                 return free
         return timeutil.from_now(self.s.tz, at=now)
 
-    async def check_in(self, user: User) -> dict:
+    def checkin_body(self, user: User) -> dict:
+        """Everything the coordinator gets about this person: coarse fields only."""
         p = user.profile
-        return await self.coordinator.checkin(
-            {
-                "agent_id": user.agent_id,
-                "free": self._window(p.free),
-                "interests": p.interests,
-                "skills": p.skills,
-                "group_pref": p.group_pref,
-                "area": self.s.area,
-                "callback_url": self.callback(user.agent_id),
-            }
-        )
+        return {
+            "agent_id": user.agent_id,
+            "free": self._window(p.free),
+            "interests": p.interests,
+            "skills": p.skills,
+            "group_pref": p.group_pref,
+            "area": self.s.area,
+            "callback_url": self.callback(user.agent_id),
+        }
+
+    def would_share(self, user: User) -> dict:
+        """The consent card: exactly what check_in sends, in plain words."""
+        body = self.checkin_body(user)
+        return {"free": pretty(body["free"]), "area": body["area"], "interests": body["interests"], "skills": body["skills"]}
+
+    async def check_in(self, user: User) -> dict:
+        if not user.consented:
+            raise Conflict("tap Share first: I only tell the coordinator about you once you say OK")
+        return await self.coordinator.checkin(self.checkin_body(user))
 
     async def _quiet_check_in(self, user: User) -> None:
         try:

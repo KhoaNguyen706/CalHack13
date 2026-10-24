@@ -1,5 +1,6 @@
 // Sign-in and the chat with your personal agent (agents service): /?agent=<agent_id>
-// Your agent checks you in, answers the coordinator's invitations for you, and you approve every step here.
+// Your agent checks you in only after you tap Share, answers the coordinator's invitations for you, and you approve
+// every step here.
 // Each window keeps its own agent in the URL, so two windows on one laptop are two different people.
 import { useEffect, useRef, useState } from 'react';
 import { AGENTS, API } from './config.ts';
@@ -12,10 +13,34 @@ type Match = {
   match_id: string; members: string[]; accepted: string[]; state: string; window: string; area: string;
   host?: string | null; size?: number | null;
 };
+type Shared = { free: string; area: string; interests: string[]; skills: string[] };
 type Status = {
   agent_id: string; name: string; transcript: Line[]; match: Match | null; is_host: boolean; needs_accept: boolean;
-  my_part: string | null; challenge: { title?: string; goal?: string } | null;
+  my_part: string | null; challenge: { title?: string; goal?: string } | null; consented: boolean; would_share: Shared;
 };
+
+// Google Identity Services, loaded only on the sign-in page.
+type GoogleId = {
+  initialize: (o: { client_id: string; callback: (r: { credential: string }) => void }) => void;
+  renderButton: (el: HTMLElement, o: Record<string, unknown>) => void;
+};
+declare global {
+  interface Window {
+    google?: { accounts: { id: GoogleId } };
+  }
+}
+
+function loadGoogle(): Promise<GoogleId> {
+  return new Promise((resolve, reject) => {
+    if (window.google) return resolve(window.google.accounts.id);
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.onload = () => (window.google ? resolve(window.google.accounts.id) : reject(new Error('Google sign-in did not load')));
+    script.onerror = () => reject(new Error('Google sign-in did not load'));
+    document.head.appendChild(script);
+  });
+}
 
 async function call<T>(base: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(base + path, body === undefined ? {} : {
@@ -58,17 +83,39 @@ function Login() {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [googleReady, setGoogleReady] = useState<boolean | null>(null); // null = still checking
+  const button = useRef<HTMLDivElement>(null);
 
-  const submit = (e: React.FormEvent) => {
+  const enter = (s: Status) => {
+    remember(KEY, s.agent_id);
+    location.assign(`?agent=${s.agent_id}`);
+  };
+
+  // Sign in with Google when the agents service has a client id; otherwise only the demo sign-in shows.
+  useEffect(() => {
+    call<{ google_client_id: string | null }>(AGENTS, '/auth/config')
+      .then(async ({ google_client_id }) => {
+        if (!google_client_id) return setGoogleReady(false);
+        const id = await loadGoogle();
+        id.initialize({
+          client_id: google_client_id,
+          callback: ({ credential }) => {
+            setBusy(true);
+            call<Status>(AGENTS, '/users/google', { credential }).then(enter).catch(e => setError(String(e.message))).finally(() => setBusy(false));
+          },
+        });
+        if (button.current) id.renderButton(button.current, { theme: 'filled_blue', size: 'large', shape: 'pill', text: 'continue_with', width: 280 });
+        setGoogleReady(true);
+      })
+      .catch(() => setGoogleReady(false));
+  }, []);
+
+  const demo = (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     // A fresh identity per sign-in, so a second window becomes a second person.
-    const identity = crypto.randomUUID();
-    call<Status>(AGENTS, '/users/login', { identity, name: name.trim() })
-      .then(s => {
-        remember(KEY, s.agent_id);
-        location.assign(`?agent=${s.agent_id}`);
-      })
+    call<Status>(AGENTS, '/users/login', { identity: crypto.randomUUID(), name: name.trim() })
+      .then(enter)
       .catch(e => setError(String(e.message)))
       .finally(() => setBusy(false));
   };
@@ -78,13 +125,27 @@ function Login() {
       <h1>Meet your agent</h1>
       <InstallHint />
       <p className="muted">
-        Your personal AI agent finds a small group nearby for a quick challenge. It only shares your rough free time
-        and interests, and you approve every step.
+        Your personal AI agent finds a small group nearby for a quick challenge. You approve every step, and nothing
+        about you is shared until you say OK.
       </p>
-      <form className="card" onSubmit={submit}>
-        <label className="label">Your first name<input value={name} onChange={e => setName(e.target.value)} placeholder="Linh" required maxLength={40} /></label>
-        <button className="primary" type="submit" disabled={busy}>{busy ? 'Waking up your agent…' : 'Start'}</button>
-      </form>
+      <section className="card">
+        <div ref={button} className="google-button" />
+        {googleReady === null && <p className="muted">Loading sign-in…</p>}
+        {googleReady && (
+          <p className="muted small">
+            Krew keeps only your first name. Your email and photo from Google are never stored or shared.
+          </p>
+        )}
+        {busy && <p className="muted">Waking up your agent…</p>}
+      </section>
+      <details className="card" open={googleReady === false}>
+        <summary className="label">No Google account? Try the demo with a first name</summary>
+        <form className="stack" onSubmit={demo}>
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Linh" required maxLength={40} aria-label="Your first name" />
+          <p className="muted small">Your agent starts with a sample profile, like one a real personal agent would already have.</p>
+          <button className="secondary" type="submit" disabled={busy}>Start the demo</button>
+        </form>
+      </details>
       <a className="pill" href="?view=log" target="_blank">Watch the agents live ↗</a>
       {error && <p className="error">{error}</p>}
     </main>
@@ -215,7 +276,25 @@ function Chat({ agentId }: { agentId: string }) {
         </section>
       )}
 
-      {!m && (
+      {!status.consented && (
+        <section className="card key">
+          <p className="label">Before I find you a group · OK to share?</p>
+          <p>I'll share only this with the coordinator, so it can match you:</p>
+          <ul className="shared">
+            <li>🕑 Free {status.would_share.free}</li>
+            <li>📍 {status.would_share.area}</li>
+            <li>🧩 Good at: {status.would_share.skills.join(', ') || 'not told me yet'}</li>
+            <li>✨ Into: {status.would_share.interests.join(', ') || 'not told me yet'}</li>
+          </ul>
+          <p className="muted small">No name, email or exact location. Everything else you tell me stays with me.</p>
+          <div className="row">
+            <button className="primary" onClick={() => run(call(AGENTS, `/users/${agentId}/consent`, { share: true }))}>Share</button>
+            <button className="secondary" onClick={() => run(call(AGENTS, `/users/${agentId}/consent`, { share: false }))}>Not now</button>
+          </div>
+        </section>
+      )}
+
+      {!m && status.consented && (
         <section className="card">
           <p className="label">Start a challenge · how many people?</p>
           <div className="row">

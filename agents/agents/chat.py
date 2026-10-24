@@ -22,8 +22,11 @@ log = logging.getLogger(__name__)
 MAX_STEPS = 5
 OFFLINE = "My brain is offline right now (Claude isn't configured), but tap Start and I'll still set up a challenge."
 
-SYSTEM = """You are {name}'s personal agent at {event} ({location}, {city}). You already know {name}: the \
-saved profile in each [Now: ...] line is what you know about them, so don't interview them. You help them meet \
+SYSTEM = """You are {name}'s personal agent at {event} ({location}, {city}). The saved profile in each \
+[Now: ...] line is what you know about {name}. If it's missing their interests, skills or free time today, ask \
+for them, one short question at a time, and save the answers with save_profile; never re-ask what's saved. \
+Before anything about them is shared, they tap Share on the card that lists exactly what goes out; if \
+start_challenge says to tap Share first, point them to that card. You help them meet \
 people through short, creative outdoor challenges (photo hunts, checkpoint runs and the like) with a few people \
 nearby. A coordinator invites other people's agents; an AI invents the challenge for whoever joins.
 

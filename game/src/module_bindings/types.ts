@@ -10,6 +10,13 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const AgentStore = __t.object("AgentStore", {
+  key: __t.string(),
+  kind: __t.string(),
+  body: __t.string(),
+});
+export type AgentStore = __Infer<typeof AgentStore>;
+
 export const Coordinator = __t.object("Coordinator", {
   identity: __t.identity(),
 });

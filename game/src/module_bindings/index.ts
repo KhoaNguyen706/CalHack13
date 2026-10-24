@@ -39,6 +39,8 @@ import DropSeatReducer from "./drop_seat_reducer";
 import EndRoundReducer from "./end_round_reducer";
 import JoinReducer from "./join_reducer";
 import StartRoundReducer from "./start_round_reducer";
+import StoreDeleteReducer from "./store_delete_reducer";
+import StorePutReducer from "./store_put_reducer";
 import SubmitPhotoReducer from "./submit_photo_reducer";
 
 // Import all procedure arg schemas
@@ -113,6 +115,8 @@ const reducersSchema = __reducers(
   __reducerSchema("end_round", EndRoundReducer),
   __reducerSchema("join", JoinReducer),
   __reducerSchema("start_round", StartRoundReducer),
+  __reducerSchema("store_delete", StoreDeleteReducer),
+  __reducerSchema("store_put", StorePutReducer),
   __reducerSchema("submit_photo", SubmitPhotoReducer),
 );
 

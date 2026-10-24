@@ -43,10 +43,17 @@ const photo = table(
   { matchId: t.string().primaryKey(), url: t.string(), uploadedBy: t.identity(), at: t.timestamp() }
 );
 
+// Private storage for the agents service (people, chats, memories, photos), so a server restart keeps everyone
+// signed in. Only the coordinator identity reads (SQL with its token) or writes it; phones never see it.
+const agentStore = table(
+  { name: 'agent_store' },
+  { key: t.string().primaryKey(), kind: t.string().index('btree'), body: t.string() }
+);
+
 // Identities allowed to start rounds. The publisher is added on init.
 const coordinator = table({ name: 'coordinator' }, { identity: t.identity().primaryKey() });
 
-const spacetimedb = schema({ round, seat, seatKey, seatHint, roundSecret, photo, coordinator });
+const spacetimedb = schema({ round, seat, seatKey, seatHint, roundSecret, photo, coordinator, agentStore });
 export default spacetimedb;
 
 type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
@@ -126,6 +133,18 @@ export const end_round = spacetimedb.reducer({ matchId: t.string() }, (ctx, { ma
   onlyCoordinator(ctx);
   const r = playingRound(ctx, matchId);
   if (r.state !== 'done') ctx.db.round.matchId.update({ ...r, state: 'cancelled' });
+});
+
+// Coordinator only: save one row of the agents service's data (insert or replace).
+export const store_put = spacetimedb.reducer({ key: t.string(), kind: t.string(), body: t.string() }, (ctx, row) => {
+  onlyCoordinator(ctx);
+  if (ctx.db.agentStore.key.find(row.key)) ctx.db.agentStore.key.update(row);
+  else ctx.db.agentStore.insert(row);
+});
+
+export const store_delete = spacetimedb.reducer({ key: t.string() }, (ctx, { key }) => {
+  onlyCoordinator(ctx);
+  ctx.db.agentStore.key.delete(key);
 });
 
 // A phone claims its person's seat. First claim wins; the same phone can rejoin.

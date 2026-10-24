@@ -1,14 +1,29 @@
-"""Users, memories, photo checks and feedback in SQLite, so a restart keeps the demo state."""
+"""Users, memories, photo checks, photos and feedback in SQLite, copied to SpacetimeDB when a mirror is set.
 
+SQLite answers every query. With a mirror (agents/mirror.py) each write is also saved to SpacetimeDB, and a new
+Store starts by reloading those rows, so a restart (Heroku wipes the disk) keeps everyone signed in.
+"""
+
+import base64
 import sqlite3
 import time
 import uuid
+from typing import Protocol
 
 from .models import Feedback, User
 
 
+class Mirror(Protocol):
+    def load(self) -> list[tuple[str, dict]]: ...
+    def put(self, kind: str, key: str, row: dict) -> None: ...
+
+
+TABLES = ("users", "memories", "feedback", "photo_checks", "photos")
+
+
 class Store:
-    def __init__(self, path: str = "agents.db"):
+    def __init__(self, path: str = "agents.db", mirror: Mirror | None = None):
+        self.mirror = mirror
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.execute("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, body TEXT NOT NULL)")
         self.db.execute(
@@ -27,14 +42,33 @@ class Store:
             "CREATE TABLE IF NOT EXISTS photos (id TEXT PRIMARY KEY, match_id TEXT NOT NULL, agent_id TEXT,"
             " media_type TEXT NOT NULL, data BLOB NOT NULL, ts REAL NOT NULL)"
         )
+        if mirror:
+            for kind, row in mirror.load():
+                if kind == "photos":
+                    row = {**row, "data": base64.b64decode(row["data"])}
+                if kind in TABLES:
+                    self._write(kind, row)
+            self.db.commit()
         self.users = {r[0]: User.model_validate_json(r[1]) for r in self.db.execute("SELECT id, body FROM users")}
+
+    def _write(self, table: str, row: dict) -> None:
+        cols = ", ".join(row)
+        self.db.execute(f"INSERT OR REPLACE INTO {table} ({cols}) VALUES ({', '.join('?' * len(row))})", tuple(row.values()))
+
+    def _save(self, table: str, key: str, row: dict) -> None:
+        """Write one row locally, then copy it to SpacetimeDB."""
+        self._write(table, row)
+        self.db.commit()
+        if self.mirror:
+            if table == "photos":
+                row = {**row, "data": base64.b64encode(row["data"]).decode()}
+            self.mirror.put(table, key, row)
 
     # --- users -------------------------------------------------------------------
 
     def save_user(self, user: User) -> User:
         self.users[user.agent_id] = user
-        self.db.execute("INSERT OR REPLACE INTO users (id, body) VALUES (?, ?)", (user.agent_id, user.model_dump_json()))
-        self.db.commit()
+        self._save("users", user.agent_id, {"id": user.agent_id, "body": user.model_dump_json()})
         return user
 
     def user_by_identity(self, identity: str) -> User | None:
@@ -45,11 +79,8 @@ class Store:
     def add_memory(self, agent_id: str, kind: str, text: str, memory_id: str | None = None) -> str:
         """A fixed memory_id makes the write idempotent (seeded memories)."""
         memory_id = memory_id or f"{agent_id}-{uuid.uuid4().hex[:10]}"
-        self.db.execute(
-            "INSERT OR REPLACE INTO memories (id, agent_id, kind, text, ts) VALUES (?, ?, ?, ?, ?)",
-            (memory_id, agent_id, kind, text, time.time()),
-        )
-        self.db.commit()
+        row = {"id": memory_id, "agent_id": agent_id, "kind": kind, "text": text, "ts": time.time()}
+        self._save("memories", memory_id, row)
         return memory_id
 
     def recent_memories(self, agent_id: str, n: int = 5) -> list[str]:
@@ -62,11 +93,8 @@ class Store:
 
     def save_photo(self, match_id: str, agent_id: str | None, media_type: str, data: bytes) -> str:
         photo_id = uuid.uuid4().hex
-        self.db.execute(
-            "INSERT INTO photos (id, match_id, agent_id, media_type, data, ts) VALUES (?, ?, ?, ?, ?, ?)",
-            (photo_id, match_id, agent_id, media_type, data, time.time()),
-        )
-        self.db.commit()
+        row = {"id": photo_id, "match_id": match_id, "agent_id": agent_id, "media_type": media_type, "data": data, "ts": time.time()}
+        self._save("photos", photo_id, row)
         return photo_id
 
     def photo(self, photo_id: str) -> tuple[str, bytes] | None:
@@ -77,13 +105,11 @@ class Store:
 
     def save_check(self, match_id: str, step: str, passed: bool, reason: str, agent_id: str | None) -> None:
         """Latest photo wins, except that a step that already passed stays passed."""
-        self.db.execute(
-            "INSERT INTO photo_checks (match_id, step, passed, reason, agent_id, ts) VALUES (?, ?, ?, ?, ?, ?)"
-            " ON CONFLICT(match_id, step) DO UPDATE SET passed = excluded.passed, reason = excluded.reason,"
-            " agent_id = excluded.agent_id, ts = excluded.ts WHERE photo_checks.passed = 0",
-            (match_id, step, int(passed), reason, agent_id, time.time()),
-        )
-        self.db.commit()
+        old = self.db.execute("SELECT passed FROM photo_checks WHERE match_id = ? AND step = ?", (match_id, step)).fetchone()
+        if old and old[0]:
+            return
+        row = {"match_id": match_id, "step": step, "passed": int(passed), "reason": reason, "agent_id": agent_id, "ts": time.time()}
+        self._save("photo_checks", f"{match_id}/{step}", row)
 
     def checks(self, match_id: str) -> dict[str, dict]:
         rows = self.db.execute("SELECT step, passed, reason FROM photo_checks WHERE match_id = ?", (match_id,))
@@ -92,11 +118,8 @@ class Store:
     # --- feedback ----------------------------------------------------------------
 
     def save_feedback(self, fb: Feedback) -> None:
-        self.db.execute(
-            "INSERT OR REPLACE INTO feedback (match_id, agent_id, body) VALUES (?, ?, ?)",
-            (fb.match_id, fb.agent_id, fb.model_dump_json()),
-        )
-        self.db.commit()
+        row = {"match_id": fb.match_id, "agent_id": fb.agent_id, "body": fb.model_dump_json()}
+        self._save("feedback", f"{fb.match_id}/{fb.agent_id}", row)
 
     def feedback(self, match_id: str | None = None) -> list[Feedback]:
         if match_id is None:

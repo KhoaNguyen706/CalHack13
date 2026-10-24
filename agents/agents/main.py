@@ -18,6 +18,7 @@ from . import chat, llm, spacetimeauth, sponsors, timeutil
 from .config import Settings
 from .coordinator_client import CoordinatorClient, CoordinatorError
 from .memory import Memory
+from .mirror import Mirror
 from .models import Answer, ChatIn, ChatLine, Consent, Decision, Feedback, Login, PersonalContext, PhotoCheck, PhotoUpload, Question, SpacetimeLogin, Start
 from .place import Place, PlaceService
 from .service import AgentsService, Conflict, NotFound
@@ -49,7 +50,10 @@ def create_app(
             httpx.AsyncClient(base_url=s.coordinator_url, transport=coordinator_transport) as coord_http,
             httpx.AsyncClient(transport=web_transport) as web,
         ):
-            store = Store(s.db_path)
+            mirror = None
+            if s.spacetime_url and (s.spacetime_token or s.spacetime_token_file):
+                mirror = Mirror(s.spacetime_url, s.spacetime_db, s.spacetime_token, s.spacetime_token_file)
+            store = Store(s.db_path, mirror)
             memory = Memory(store, s.moss_project_id, s.moss_project_key, s.moss_index)
             await memory.start()
             claude_client = claude or llm.make_claude(s.use_claude)

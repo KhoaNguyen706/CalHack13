@@ -24,6 +24,12 @@ class Settings:
     # Where the coordinator reaches this service; every agent's callback_url is built from it.
     public_url: str = _env("AGENTS_PUBLIC_URL", "http://localhost:8100")
     db_path: str = _env("AGENTS_DB", "agents.db")
+    # Save everything to SpacetimeDB too (the game database), so restarts keep people signed in. Needs the
+    # publisher token (the same SPACETIME_TOKEN as the coordinator), or a file holding it under docker compose.
+    spacetime_url: str = _env("SPACETIME_URL")
+    spacetime_db: str = _env("SPACETIME_DB", "threekey")
+    spacetime_token: str = _env("SPACETIME_TOKEN")
+    spacetime_token_file: str = _env("SPACETIME_TOKEN_FILE")
     cache_dir: Path = Path(_env("AGENTS_CACHE", str(ROOT / "cache")))
 
     use_claude: bool = _flag("AGENTS_WITH_CLAUDE", _env("AGENT_WITH_CLAUDE", "1"))  # either name works

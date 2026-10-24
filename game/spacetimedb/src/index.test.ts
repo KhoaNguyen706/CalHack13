@@ -116,6 +116,16 @@ describe('three-key round', () => {
     expect(round(test)?.state).toBe('cancelled');
   });
 
+  it('agent storage: only the coordinator writes it, and a put replaces the row', () => {
+    const test = started();
+    expect(() => test.withReducerTx(stranger, ctx => game.store_put(ctx, { key: 'users/x', kind: 'users', body: '{}' }))).toThrow('only the coordinator');
+    test.withReducerTx(coord, ctx => game.store_put(ctx, { key: 'users/x', kind: 'users', body: '{"a":1}' }));
+    test.withReducerTx(coord, ctx => game.store_put(ctx, { key: 'users/x', kind: 'users', body: '{"a":2}' }));
+    expect(test.db.agentStore.key.find('users/x')?.body).toBe('{"a":2}');
+    test.withReducerTx(coord, ctx => game.store_delete(ctx, { key: 'users/x' }));
+    expect(test.db.agentStore.key.find('users/x')).toBeNull();
+  });
+
   it('restarting a round clears seats, check-ins and the photo', () => {
     const test = started();
     joinAll(test);

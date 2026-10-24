@@ -57,8 +57,16 @@ services:
       MOSS_INDEX: ${MOSS_INDEX:-agent-memory}
       AGENTS_DB: /data/agents.db
       AGENTS_CACHE: /data/cache
+      # People, chats and photos are also saved in SpacetimeDB (agent_store), like on Heroku.
+      SPACETIME_URL: http://spacetime:3000
+      SPACETIME_DB: threekey
+      SPACETIME_TOKEN_FILE: /shared/spacetime_token
+      # Sign in with SpacetimeAuth (optional): the client id/secret from the database's SpacetimeAuth dashboard.
+      SPACETIMEAUTH_CLIENT_ID: ${SPACETIMEAUTH_CLIENT_ID:-}
+      SPACETIMEAUTH_CLIENT_SECRET: ${SPACETIMEAUTH_CLIENT_SECRET:-}
     volumes:
       - agents-data:/data
+      - shared:/shared:ro
     depends_on:
       - coordinator
 

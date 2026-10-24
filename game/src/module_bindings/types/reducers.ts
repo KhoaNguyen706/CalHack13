@@ -11,6 +11,8 @@ import DropSeatReducer from "../drop_seat_reducer";
 import EndRoundReducer from "../end_round_reducer";
 import JoinReducer from "../join_reducer";
 import StartRoundReducer from "../start_round_reducer";
+import StoreDeleteReducer from "../store_delete_reducer";
+import StorePutReducer from "../store_put_reducer";
 import SubmitPhotoReducer from "../submit_photo_reducer";
 
 export type CheckInParams = __Infer<typeof CheckInReducer>;
@@ -18,5 +20,7 @@ export type DropSeatParams = __Infer<typeof DropSeatReducer>;
 export type EndRoundParams = __Infer<typeof EndRoundReducer>;
 export type JoinParams = __Infer<typeof JoinReducer>;
 export type StartRoundParams = __Infer<typeof StartRoundReducer>;
+export type StoreDeleteParams = __Infer<typeof StoreDeleteReducer>;
+export type StorePutParams = __Infer<typeof StorePutReducer>;
 export type SubmitPhotoParams = __Infer<typeof SubmitPhotoReducer>;
 

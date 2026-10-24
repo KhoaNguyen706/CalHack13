@@ -112,7 +112,7 @@ class Coordinator:
     # --- matching --------------------------------------------------------------
 
     async def run_matching(self) -> list[Match]:
-        """Form as many groups of 3 as the pool allows. Each group is asked, then proposed as pending."""
+        """Form as many groups as the pool allows. Each group is asked, then proposed as pending."""
         async with self._match_lock:
             pool = self.pool()
             areas = ", ".join(sorted({a.area for a in pool})) or "none"
@@ -127,7 +127,7 @@ class Coordinator:
                     made.append(match)
 
             if not made:
-                self.events.emit("match", "no valid group of 3 right now")
+                self.events.emit("match", "no valid group right now")
             return made
 
     async def _negotiate(self, group: Candidate, reason: str, picked_by: str, excluded: set[str]) -> Match | None:
@@ -145,11 +145,12 @@ class Coordinator:
         plan = {
             "area": members[0].area,
             "window": str(group.window),
-            "group_size": 3,
+            "group_size": len(members),
             "roles": group.roles,
             "activity": f"{TIMER_MIN}-minute cooperative hunt at a public spot",
         }
-        question = f"Plan: meet 2 others in {plan['area']}, {pretty(group.window)}, for a {plan['activity']}. Does it fit?"
+        others = f"{len(members) - 1} other" + ("s" if len(members) > 2 else "")
+        question = f"Plan: meet {others} in {plan['area']}, {pretty(group.window)}, for a {plan['activity']}. Does it fit?"
         replies = await self.broker.ask_all(members, question, plan)
 
         for agent_id, r in replies.items():
@@ -180,7 +181,7 @@ class Coordinator:
         self.store.save_match(match)
         for m in match.members:
             self.store.save_agent(self.store.agents[m].model_copy(update={"match_id": match.match_id}))
-        self.events.emit("match", "group proposed · waiting for 3/3 approvals", match_id=match.match_id)
+        self.events.emit("match", f"group proposed · waiting for {len(match.members)}/{len(match.members)} approvals", match_id=match.match_id)
         return match
 
     # --- approval and game state -----------------------------------------------
@@ -211,7 +212,7 @@ class Coordinator:
         match = self.store.save_match(match.model_copy(update={"accepted": accepted}))
         ticks = "  ".join(f"{name(m)} {'✓' if m in accepted else '…'}" for m in match.members)
         if len(accepted) < len(match.members):
-            self.events.emit("approval", f"{ticks}  ({len(accepted)}/3)", match_id=match_id, accepted=accepted)
+            self.events.emit("approval", f"{ticks}  ({len(accepted)}/{len(match.members)})", match_id=match_id, accepted=accepted)
             return match
 
         match = self._save_state(match, MatchState.confirmed)

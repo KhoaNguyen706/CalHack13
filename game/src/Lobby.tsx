@@ -60,6 +60,7 @@ function Login() {
         <button className="primary" type="submit">Check in</button>
       </form>
       <p className="muted">Testing on one laptop: log in as a different person in each window, with overlapping free time.</p>
+      <a className="pill" href="?view=log" target="_blank">Watch the agents live ↗</a>
       {error && <p className="error">{error}</p>}
     </main>
   );
@@ -126,7 +127,10 @@ function Home() {
     <main className="app">
       <header>
         <h1>Hi {title(AGENT)}</h1>
-        <a className="pill" href="?">switch person</a>
+        <span className="row">
+          <a className="pill" href="?view=log" target="_blank">watch live ↗</a>
+          <a className="pill" href="?">switch person</a>
+        </span>
       </header>
       <p className="muted">{agent.area} · {agent.free} · {agent.skills.join(', ')}</p>
 

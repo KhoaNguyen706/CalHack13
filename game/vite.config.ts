@@ -18,4 +18,6 @@ export default defineConfig({
       '/stdb': { target: spacetime, changeOrigin: true, ws: true, rewrite: p => p.replace(/^\/stdb/, '') },
     },
   },
+  // Heroku serves the built app with `vite preview` on its own hostname.
+  preview: { allowedHosts: true },
 });

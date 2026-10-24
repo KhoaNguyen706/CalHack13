@@ -1,0 +1,143 @@
+"""Frozen interface contract. Every agent (seeded, web chat, MCP) speaks these models."""
+
+import re
+from datetime import datetime, timezone
+from enum import Enum
+from typing import Literal, NamedTuple
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_FREE_RE = re.compile(r"^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) (\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$")
+
+
+class Window(NamedTuple):
+    """A free-time window: day plus start/end in minutes since midnight."""
+
+    day: str
+    start: int
+    end: int
+
+    def __str__(self) -> str:
+        return f"{self.day} {self.start // 60:02d}:{self.start % 60:02d}-{self.end // 60:02d}:{self.end % 60:02d}"
+
+
+def parse_free(text: str) -> Window:
+    """Parse "Sat 14:00-16:00" into a Window."""
+    m = _FREE_RE.match(text.strip())
+    if not m:
+        raise ValueError('free must look like "Sat 14:00-16:00"')
+    day, h1, m1, h2, m2 = m.groups()
+    start, end = int(h1) * 60 + int(m1), int(h2) * 60 + int(m2)
+    if not (0 <= start < end <= 24 * 60) or int(m1) > 59 or int(m2) > 59:
+        raise ValueError("free window must be a valid start < end time on one day")
+    return Window(day, start, end)
+
+
+def _clean(items: list[str]) -> list[str]:
+    return sorted({i.strip().lower() for i in items if i.strip()})
+
+
+class CheckIn(BaseModel):
+    """POST /agents/checkin. Unknown fields (names, exact location, ...) are dropped: coarse info only."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    agent_id: str = Field(pattern=r"^[a-z0-9_-]{1,32}$")
+    free: str
+    interests: list[str] = []
+    skills: list[str] = []
+    group_pref: Literal["small", "any", "large"] = "small"
+    area: str = Field(min_length=1, max_length=64)
+    # Where the coordinator POSTs questions. Omit it and poll GET /agents/{id}/questions instead.
+    callback_url: str | None = None
+
+    @field_validator("free")
+    @classmethod
+    def _check_free(cls, v: str) -> str:
+        return str(parse_free(v))
+
+    @field_validator("interests", "skills")
+    @classmethod
+    def _check_tags(cls, v: list[str]) -> list[str]:
+        return _clean(v)
+
+    @field_validator("area")
+    @classmethod
+    def _check_area(cls, v: str) -> str:
+        return v.strip()
+
+    @property
+    def window(self) -> Window:
+        return parse_free(self.free)
+
+
+class Agent(CheckIn):
+    """What the coordinator keeps per agent."""
+
+    match_id: str | None = None
+    # Seeded personas with no live agent behind them answer "yes" to every plan.
+    auto_reply: bool = False
+
+
+class Ask(BaseModel):
+    """POST /agents/{id}/ask"""
+
+    question: str
+    plan: dict | None = None
+
+
+class Question(Ask):
+    question_id: str
+    agent_id: str
+
+
+class Reply(BaseModel):
+    """POST /agents/{id}/reply. A counter carries a new free window."""
+
+    question_id: str | None = None
+    answer: Literal["yes", "no", "counter"]
+    free: str | None = None
+    note: str | None = None
+
+    @field_validator("free")
+    @classmethod
+    def _check_free(cls, v: str | None) -> str | None:
+        return None if v is None else str(parse_free(v))
+
+
+class MatchState(str, Enum):
+    pending = "pending"
+    confirmed = "confirmed"
+    playing = "playing"
+    done = "done"
+    cancelled = "cancelled"
+
+
+class Match(BaseModel):
+    """GET /matches/{id}"""
+
+    match_id: str
+    members: list[str]
+    roles: dict[str, str]
+    area: str
+    window: str
+    state: MatchState = MatchState.pending
+    accepted: list[str] = []
+    reason: str = ""
+    picked_by: Literal["claude", "rules"] = "rules"
+    challenge: dict | None = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class Accept(BaseModel):
+    """POST /matches/{id}/accept"""
+
+    agent_id: str
+    accept: bool = True
+
+
+class StateChange(BaseModel):
+    """POST /matches/{id}/state, used by the game page."""
+
+    state: Literal["playing", "done"]

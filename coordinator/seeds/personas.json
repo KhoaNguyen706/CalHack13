@@ -1,0 +1,24 @@
+[
+  {"agent_id": "linh",   "free": "Sat 14:00-16:00", "interests": ["puzzles", "hackathons", "ai"],      "skills": ["riddles"],     "group_pref": "small", "area": "UC Berkeley"},
+  {"agent_id": "marcus", "free": "Sat 13:00-16:00", "interests": ["campus", "hackathons", "ai"],       "skills": ["map"],         "group_pref": "small", "area": "UC Berkeley"},
+  {"agent_id": "priya",  "free": "Sat 14:00-17:00", "interests": ["photography", "hackathons", "ai"],  "skills": ["camera"],      "group_pref": "any",   "area": "UC Berkeley"},
+
+  {"agent_id": "diego",  "free": "Sat 15:00-17:00", "interests": ["trivia", "music"],          "skills": ["logic"],       "group_pref": "small", "area": "UC Berkeley"},
+  {"agent_id": "amara",  "free": "Sat 15:00-18:00", "interests": ["exploring", "food"],        "skills": ["navigation"],  "group_pref": "any",   "area": "UC Berkeley"},
+  {"agent_id": "kenji",  "free": "Sat 15:30-18:00", "interests": ["video", "music"],           "skills": ["video"],       "group_pref": "small", "area": "UC Berkeley"},
+  {"agent_id": "sofia",  "free": "Sat 10:00-12:00", "interests": ["word games", "design"],     "skills": ["puzzles"],     "group_pref": "small", "area": "UC Berkeley"},
+  {"agent_id": "omar",   "free": "Sat 10:00-12:30", "interests": ["campus", "running"],        "skills": ["directions"],  "group_pref": "small", "area": "UC Berkeley"},
+  {"agent_id": "mei",    "free": "Sat 10:30-13:00", "interests": ["photos", "design"],         "skills": ["photography"], "group_pref": "any",   "area": "UC Berkeley"},
+  {"agent_id": "jordan", "free": "Sat 18:00-21:00", "interests": ["ai", "gaming"],             "skills": ["backend"],     "group_pref": "small", "area": "UC Berkeley"},
+  {"agent_id": "nia",    "free": "Sat 18:00-20:00", "interests": ["gaming", "anime"],          "skills": ["frontend"],    "group_pref": "any",   "area": "UC Berkeley"},
+  {"agent_id": "tomas",  "free": "Sat 18:30-21:00", "interests": ["gaming", "climbing"],       "skills": ["design"],      "group_pref": "small", "area": "UC Berkeley"},
+  {"agent_id": "ravi",   "free": "Sun 09:00-11:00", "interests": ["puzzles", "chess"],         "skills": ["logic"],       "group_pref": "small", "area": "UC Berkeley"},
+  {"agent_id": "hana",   "free": "Sat 12:00-20:00", "interests": ["networking"],               "skills": ["pitching"],    "group_pref": "large", "area": "UC Berkeley"},
+
+  {"agent_id": "alex",   "free": "Mon 12:00-14:00", "interests": ["transfer", "puzzles"],      "skills": ["riddles"],     "group_pref": "small", "area": "SJSU"},
+  {"agent_id": "bao",    "free": "Mon 11:00-14:00", "interests": ["transfer", "campus"],       "skills": ["map"],         "group_pref": "small", "area": "SJSU"},
+  {"agent_id": "carmen", "free": "Mon 12:00-15:00", "interests": ["transfer", "photography"],  "skills": ["camera"],      "group_pref": "any",   "area": "SJSU"},
+  {"agent_id": "dev",    "free": "Tue 16:00-18:00", "interests": ["transfer", "basketball"],   "skills": ["trivia"],      "group_pref": "small", "area": "SJSU"},
+  {"agent_id": "elif",   "free": "Tue 16:00-19:00", "interests": ["transfer", "boba"],         "skills": ["exploring"],   "group_pref": "any",   "area": "SJSU"},
+  {"agent_id": "farah",  "free": "Wed 17:00-19:00", "interests": ["transfer", "art"],          "skills": ["design"],      "group_pref": "small", "area": "SJSU"}
+]

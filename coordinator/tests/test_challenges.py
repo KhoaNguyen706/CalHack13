@@ -203,3 +203,24 @@ def test_leaving_before_the_start_reopens_the_seat(client):
     after = client.post(f"/matches/{mid}/leave", json={"agent_id": leaver}).json()
     assert after["state"] == "inviting" and leaver not in after["members"] and leaver in after["declined"]
     assert client.post(f"/matches/{mid}/leave", json={"agent_id": "nobody"}).status_code == 409
+
+
+def test_a_persons_feed_shows_only_their_group(client):
+    client.post("/demo/seed")  # 20 agents in the pool
+    mid = client.post("/challenges", json={"agent_id": "linh", "size": 3}).json()["match_id"]
+    pending = state(client, mid, "pending")
+    invitees = [m for m in pending["members"] if m != "linh"]
+
+    feed = client.get("/agents/linh/feed").json()
+    assert feed["match_id"] == mid and feed["labels"] == {"you": "You", "a": "Agent A", "b": "Agent B"}
+    text = " ".join(e["text"] for e in feed["events"])
+    nodes = {v for e in feed["events"] for k, v in e["data"].items() if k in ("agent_id", "joined") for v in [v]}
+    assert nodes <= {"you", "a", "b"}  # nobody outside the group, and no ids
+    assert "Linh" not in text and not any(name.title() in text for name in invitees + ["Diego", "Amara"])
+    assert "Agent A: yes" in text and "You want a 3-person challenge" in text
+
+    for who in invitees:
+        client.post(f"/matches/{mid}/accept", json={"agent_id": who})
+    named = client.get("/agents/linh/feed").json()
+    assert set(named["labels"].values()) == {"You", *(w.title() for w in invitees)}
+    assert client.get("/agents/nobody/feed").json() == {"match_id": None, "state": None, "labels": {"you": "You"}, "events": []}

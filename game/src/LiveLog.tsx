@@ -1,6 +1,8 @@
-// Negotiation screen: /?view=log
-// Draws the coordinator's live event stream (ws /ws/log): agents around the coordinator, questions going
-// out, answers coming back, groups forming and checking in. Open it in a third window while two people play.
+// Negotiation screen. Two modes:
+// - /?view=log&agent=<id> (from your chat): only your agent, the coordinator, and the agents considered for your
+//   challenge, from the coordinator's per-person feed. Others are "Agent A, B…" until everyone accepts; anyone who
+//   says no or leaves drops off, so the picture ends up being your group.
+// - /?view=log (a presenter screen): everyone, from the full event stream (ws /ws/log).
 import { useEffect, useRef, useState } from 'react';
 import { API } from './config.ts';
 
@@ -9,6 +11,10 @@ type Status = 'pool' | 'asked' | 'yes' | 'no' | 'grouped' | 'accepted' | 'here' 
 type Group = { members: string[]; state: 'proposed' | 'confirmed' | 'playing' | 'done' | 'cancelled' };
 type Pulse = { id: number; agent: string; out: boolean };
 type Board = { agents: Record<string, Status>; groups: Record<string, Group>; considering: string[]; pickedBy: string; reason: string };
+type Feed = { match_id: string | null; labels: Record<string, string>; events: LogEvent[] };
+
+const ME = new URLSearchParams(location.search).get('agent');
+const GONE_AFTER_S = 6; // a "no" stays grey this long, then drops off
 
 const EMPTY: Board = { agents: {}, groups: {}, considering: [], pickedBy: '', reason: '' };
 const STATUS_LABEL: Record<Status, string> = {
@@ -86,9 +92,54 @@ export default function LiveLog() {
   const [feed, setFeed] = useState<LogEvent[]>([]);
   const [pulses, setPulses] = useState<Pulse[]>([]);
   const [online, setOnline] = useState(false);
+  const [labels, setLabels] = useState<Record<string, string>>({});
   const feedEnd = useRef<HTMLDivElement>(null);
 
+  const animate = (fresh: Pulse[]) => {
+    if (!fresh.length) return;
+    setPulses(p => [...p, ...fresh]);
+    setTimeout(() => setPulses(p => p.filter(x => !fresh.includes(x))), 1200);
+  };
+
+  // Your group only: rebuild the picture from your feed on every update (names replace "Agent A" once everyone
+  // accepts), and animate only what's new.
   useEffect(() => {
+    if (!ME) return;
+    let live = true, last = 0;
+    const tick = () =>
+      fetch(`${API}/agents/${encodeURIComponent(ME)}/feed`)
+        .then(r => (r.ok ? r.json() : null))
+        .then((f: Feed | null) => {
+          if (!live || !f) return;
+          setOnline(true);
+          let b = EMPTY;
+          const fresh: Pulse[] = [], noAt: Record<string, number> = {};
+          for (const e of f.events) {
+            const [next, p] = apply(b, e);
+            b = next;
+            if (e.kind === 'broker' && e.data.answer === 'no') noAt[e.data.agent_id] = e.ts;
+            if (e.seq > last && Date.now() / 1000 - e.ts < 5) fresh.push(...p);
+          }
+          const now = Date.now() / 1000;
+          const stays = ([id, st]: [string, Status]) =>
+            id === 'you' || (st !== 'pool' && !(st === 'no' && now - (noAt[id] ?? 0) > GONE_AFTER_S));
+          setBoard({ ...b, agents: Object.fromEntries(Object.entries(b.agents).filter(stays)) });
+          setFeed(f.events.slice(-200));
+          setLabels(f.labels);
+          if (f.events.length) last = f.events[f.events.length - 1].seq;
+          animate(fresh);
+        })
+        .catch(() => live && setOnline(false));
+    tick();
+    const id = setInterval(tick, 1500);
+    return () => {
+      live = false;
+      clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (ME) return;
     let ws: WebSocket, retry: number, stopped = false;
     const connect = () => {
       ws = new WebSocket(API.replace(/^http/, 'ws') + '/ws/log');
@@ -107,10 +158,7 @@ export default function LiveLog() {
         });
         setFeed(f => (e.text === 'demo reset' ? [e] : [...f, e].slice(-200)));
         // Only animate live events, not the history replay.
-        if (fresh.length && Date.now() / 1000 - e.ts < 3) {
-          setPulses(p => [...p, ...fresh]);
-          setTimeout(() => setPulses(p => p.filter(x => !fresh.includes(x))), 1200);
-        }
+        if (Date.now() / 1000 - e.ts < 3) animate(fresh);
       };
       ws.onclose = () => {
         setOnline(false);
@@ -132,6 +180,8 @@ export default function LiveLog() {
   }, [feed]);
 
   const ids = Object.keys(board.agents);
+  const label = (id: string) => labels[id] ?? title(id);
+  const initials = (id: string) => (label(id).startsWith('Agent ') ? label(id).slice(6) : label(id).slice(0, 3));
   const pos = (id: string) => {
     const i = ids.indexOf(id), a = (i / Math.max(ids.length, 1)) * 2 * Math.PI - Math.PI / 2;
     return { x: MID + RING * Math.cos(a), y: MID + RING * Math.sin(a) };
@@ -140,7 +190,7 @@ export default function LiveLog() {
   return (
     <main className="app wide">
       <header>
-        <h1>Agents, live</h1>
+        <h1>{ME ? 'Your group, live' : 'Agents, live'}</h1>
         <span className="row">
           <a className="pill" href={backHref()}>← back</a>
           <span className={`pill ${online ? 'live' : ''}`}>{online ? '● live' : 'reconnecting…'}</span>
@@ -154,12 +204,7 @@ export default function LiveLog() {
               const p = pos(id);
               return <line key={id} x1={MID} y1={MID} x2={p.x} y2={p.y} className="spoke" />;
             })}
-            {Object.entries(board.groups).filter(([, g]) => g.state !== 'cancelled').map(([mid, g]) =>
-              g.members.slice(1).map((m, i) => {
-                const a = pos(g.members[i]), c = pos(m);
-                return <line key={mid + m} x1={a.x} y1={a.y} x2={c.x} y2={c.y} className={`bond ${g.state}`} />;
-              })
-            )}
+            {/* No lines between agents: every agent talks to the coordinator only. A group shows in its nodes' state. */}
             {pulses.map(p => {
               const a = pos(p.agent);
               const path = p.out ? `M${MID},${MID} L${a.x},${a.y}` : `M${a.x},${a.y} L${MID},${MID}`;
@@ -179,14 +224,15 @@ export default function LiveLog() {
               return (
                 <g key={id} className={`node ${s}`}>
                   <circle cx={p.x} cy={p.y} r="24" />
-                  <text x={p.x} y={p.y + 5}>{title(id).slice(0, 2)}</text>
-                  <text x={p.x} y={p.y + 42} className="name">{title(id)}</text>
+                  <text x={p.x} y={p.y + 5}>{initials(id)}</text>
+                  <text x={p.x} y={p.y + 42} className="name">{label(id)}</text>
                   <text x={p.x} y={p.y + 56} className="sub">{STATUS_LABEL[s]}</text>
                 </g>
               );
             })}
           </svg>
-          {ids.length === 0 && <p className="muted">No one checked in yet. Log in from another window.</p>}
+          {ids.length === 0 && <p className="muted">{ME ? 'Nothing yet. Start a challenge or wait for an invite.' : 'No one checked in yet. Log in from another window.'}</p>}
+          {ME && <p className="muted small">Only your agent, the coordinator, and the agents considered for your group. Others stay anonymous until everyone accepts.</p>}
           {board.reason && <p className="muted"><b>Why this group:</b> {board.reason}</p>}
         </section>
 

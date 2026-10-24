@@ -224,18 +224,7 @@ a.pill {
   stroke-width: 1.5;
 }
 
-.net .bond {
-  stroke: var(--accent);
-  stroke-width: 3;
-  stroke-dasharray: 6 5;
-}
 
-.net .bond.confirmed,
-.net .bond.playing,
-.net .bond.done {
-  stroke: var(--ok);
-  stroke-dasharray: none;
-}
 
 .net .hub circle {
   fill: var(--card);

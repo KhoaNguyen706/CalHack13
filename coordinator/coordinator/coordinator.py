@@ -1,6 +1,7 @@
 """Coordinator: the one place agents meet. Matching runs, approvals and challenge hand-off live here."""
 
 import asyncio
+import re
 import logging
 import uuid
 
@@ -37,7 +38,8 @@ class Conflict(ValueError):
 
 
 def name(agent_id: str) -> str:
-    return agent_id.replace("_", " ").title()
+    """ "phong-2" (a second Phong) -> "Phong": the suffix only keeps ids unique."""
+    return re.sub(r"-\d+$", "", agent_id).replace("_", " ").title()
 
 
 def pretty(w: Window) -> str:
@@ -286,7 +288,7 @@ class Coordinator:
             self.events.emit(
                 "match", "inviting " + ", ".join(map(name, ids)), match_id=match_id, host=match.host, invited=ids
             )
-            self.events.emit("match", f"picked by {picked_by}: {reason}", picked_by=picked_by, reason=reason)
+            self.events.emit("match", f"picked by {picked_by}: {reason}", picked_by=picked_by, reason=reason, match_id=match_id)
 
             plan = {"host": match.host, "size": match.size, "area": match.area, "window": match.window, "activity": ACTIVITY}
             when = pretty(parse_free(match.window))
@@ -352,6 +354,49 @@ class Coordinator:
         self._release(match)
         self.events.emit("approval", f"challenge called off · {len(match.members)} back in the pool", match_id=match_id)
         return match
+
+    # --- one person's view of the negotiation ------------------------------------
+
+    def feed(self, agent_id: str) -> dict:
+        """What one person's live screen shows: their agent, the coordinator, and the agents considered for their
+        current (or latest) challenge. Nobody else. Before everyone has accepted, the others are "Agent A, B…" and only
+        the kind of their answer shows (never their times or reasons); after, their names do."""
+        mine = [m for m in self.store.matches.values() if agent_id in m.members or agent_id in m.invited]
+        match = max(mine, key=lambda m: m.created_at) if mine else None
+        others: list[str] = []
+        for a in (match.invited + match.members) if match else []:
+            if a != agent_id and a not in others:
+                others.append(a)
+        named = bool(match) and match.state in (MatchState.confirmed, MatchState.playing, MatchState.done)
+        # Keys stand in for agent ids in what the phone gets, so it never sees who hasn't accepted yet.
+        keys = {agent_id: "you", **{a: (a if named else chr(97 + i)) for i, a in enumerate(others)}}
+        labels = {"you": "You", **{keys[a]: (name(a) if named else f"Agent {chr(65 + i)}") for i, a in enumerate(others)}}
+        spoken = {agent_id: "You", **{a: labels[keys[a]] for a in others}}
+        words = {"yes": "yes", "no": "no", "counter": "asked for another time"}
+
+        def relabel(value):
+            if isinstance(value, list):
+                return [keys.get(v, "someone") for v in value]
+            return keys.get(value, "someone")
+
+        events = []
+        for e in self.events.history:
+            d = e["data"]
+            ours = bool(match) and d.get("match_id") == match.match_id
+            if not ours and not (d.get("agent_id") == agent_id and "match_id" not in d):
+                continue
+            text = e["text"]
+            if e["kind"] == "broker" and d.get("agent_id") in others:
+                text = f"{spoken[d['agent_id']]}: {words.get(d.get('answer'), d.get('answer'))}"
+            else:
+                for a, label in sorted(spoken.items(), key=lambda kv: -len(name(kv[0]))):
+                    text = text.replace(name(a), label)
+                text = text.replace("You wants", "You want")
+            data = {k: (relabel(v) if k in ("agent_id", "host", "joined", "left", "invited", "accepted", "members") else v) for k, v in d.items()}
+            if events and events[-1]["text"] == text and events[-1]["kind"] == e["kind"]:
+                continue
+            events.append({**e, "text": text, "data": data})
+        return {"match_id": match.match_id if match else None, "state": match.state.value if match else None, "labels": labels, "events": events}
 
     # --- approval and game state -----------------------------------------------
 

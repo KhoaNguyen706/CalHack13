@@ -237,6 +237,11 @@ def create_app(
         finally:
             events.unsubscribe(queue)
 
+    @app.get("/agents/{agent_id}/feed")
+    async def feed(agent_id: str) -> dict:
+        """One person's live screen: their agent, the coordinator, and the agents considered for their challenge."""
+        return coord().feed(agent_id)
+
     @app.get("/log")
     async def log_history() -> list[dict]:
         return coord().events.history

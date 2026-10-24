@@ -171,7 +171,6 @@ function Login() {
           <button className="secondary" type="submit" disabled={busy}>Start the demo</button>
         </form>
       </details>
-      <a className="pill" href="?view=log" target="_blank">Watch the agents live ↗</a>
       {error && <p className="error">{error}</p>}
     </main>
   );

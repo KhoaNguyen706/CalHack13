@@ -87,9 +87,23 @@ spacetime login show --token         # copy: the coordinator needs it to start r
 | `SPACETIME_TOKEN` | output of `spacetime login show --token` |
 | `COORDINATOR_DB` | `/data/coordinator.db` |
 | `GROUP_SIZE` | `3`, or `2` to test `/matching/run` with two people. Host-led challenges pick their own size. |
+| `CHALLENGE_DESIGNER_URL` | `https://<agents-domain>/challenge` (step 2b). Unset → the built-in demo round. |
 
 Check `https://<railway-domain>/health` shows `"claude": true, "spacetime": true`. Run one instance only:
 open questions live in memory.
+
+**2b. Agents service on Railway.** In the same project: New → GitHub repo → root directory `agents`. Add a volume
+mounted at `/data`, generate a public domain, and set:
+
+| Variable | Value |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | the team key |
+| `COORDINATOR_URL` | `https://<railway-domain>` (the coordinator) |
+| `AGENTS_PUBLIC_URL` | `https://<agents-domain>` (this service; the coordinator calls agents back here) |
+| `AGENTS_DB` | `/data/agents.db` |
+
+Then set the coordinator's `CHALLENGE_DESIGNER_URL` to `https://<agents-domain>/challenge`. Seed the demo people with
+`curl -X POST "https://<agents-domain>/contexts/seed?shift_to_now=true"`.
 
 **3. Agents on Railway.** Same project → New service from the repo → root directory `agents` (Dockerfile). Add a
 volume at `/data`, generate a public domain, and set `ANTHROPIC_API_KEY`, `APIFY_TOKEN`, `MOSS_PROJECT_ID`,

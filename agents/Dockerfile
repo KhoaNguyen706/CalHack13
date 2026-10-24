@@ -6,4 +6,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 EXPOSE 8100
-CMD ["uvicorn", "agents.main:app", "--host", "0.0.0.0", "--port", "8100"]
+# Hosts (Railway) pass the port in PORT.
+CMD ["sh", "-c", "exec uvicorn agents.main:app --host 0.0.0.0 --port ${PORT:-8100}"]

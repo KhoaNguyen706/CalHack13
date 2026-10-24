@@ -4,13 +4,22 @@
 import { useEffect, useRef, useState } from 'react';
 import { useReducer, useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { reducers, tables } from './module_bindings';
-import { AGENTS, API } from './config.ts';
+import { AGENTS, API, openedKey } from './config.ts';
 import { CardHead, Icon, MeetCard, Pebble, SignScreen, Walrus, type Meet } from './ui.tsx';
 
 const params = new URLSearchParams(location.search);
 const MATCH = params.get('match') ?? '';
 const AGENT = params.get('agent') ?? '';
 const CHAT = `?agent=${AGENT}`;
+
+// You've seen this challenge: from now on the chat lets you stay when you tap "<".
+if (MATCH) {
+  try {
+    localStorage.setItem(openedKey(MATCH), '1');
+  } catch {
+    // private mode: the chat may open the challenge again, which is the old behavior
+  }
+}
 
 type Step = { id: string; task: string; passed: boolean; reason: string | null };
 type View = {

@@ -3,7 +3,7 @@
 // every step here.
 // Each window keeps its own agent in the URL, so two windows on one laptop are two different people.
 import { useEffect, useRef, useState } from 'react';
-import { AGENTS, API } from './config.ts';
+import { AGENTS, API, openedKey } from './config.ts';
 import InstallHint from './InstallHint.tsx';
 import { CardHead, Icon, MeetCard, Pebble, PieceIcon, PRIVACY_RULES, Reconnecting, Seats, SignScreen, Walrus, type Meet, type Seat } from './ui.tsx';
 
@@ -258,7 +258,10 @@ function Chat({ agentId }: { agentId: string }) {
           if (!live) return;
           setStatus(s);
           setLost(false);
-          if (s.match?.state === 'playing') location.assign(`?match=${s.match.match_id}&agent=${agentId}`);
+          // Open the challenge on its own only the first time; after that "<" from the game must stay here.
+          if (s.match?.state === 'playing' && !remembered(openedKey(s.match.match_id))) {
+            location.assign(`?match=${s.match.match_id}&agent=${agentId}`);
+          }
         })
         .catch(() => live && setLost(true));
     tick();
@@ -522,7 +525,7 @@ function MatchCard({ m, me, status, onAccept, onStart, onCancel, onLeave }: Matc
   if (m.state === 'playing') {
     return (
       <section className="card">
-        <CardHead eyebrow="Challenge" title="Opening your challenge…" />
+        <CardHead eyebrow="Challenge" title={remembered(openedKey(m.match_id)) ? 'Your challenge is on' : 'Opening your challenge…'} />
         <a className="btn primary" href={`?match=${m.match_id}&agent=${me}`}>Open challenge</a>
       </section>
     );

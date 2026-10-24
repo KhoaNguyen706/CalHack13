@@ -65,6 +65,7 @@ def test_fallback_color_hunt_fits_any_group():
     assert set(rnd["keys"]) == {"phong", "linh"} and "Linh" in rnd["keys"]["phong"]
     assert [s["id"] for s in rnd["steps"]] == ["s1", "s2", "s3"]  # one find each, then a group photo
     assert all(s["check"] for s in rnd["steps"])
+    assert set(rnd["hints"]) == {"phong", "linh"} and "Linh" in rnd["hints"]["phong"]  # one private nudge each
 
 
 def test_photo_check_needs_one_image():

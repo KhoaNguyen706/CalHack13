@@ -44,6 +44,7 @@ import SubmitPhotoReducer from "./submit_photo_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import MyHintRow from "./my_hint_table";
 import MyKeyRow from "./my_key_table";
 import PhotoRow from "./photo_table";
 import RoundRow from "./round_table";
@@ -89,6 +90,13 @@ const tablesSchema = __schema({
       { name: 'seat_seat_id_key', constraint: 'unique', columns: ['seatId'] },
     ],
   }, SeatRow),
+  myHint: __table({
+    name: 'my_hint',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, MyHintRow),
   myKey: __table({
     name: 'my_key',
     indexes: [
@@ -114,6 +122,8 @@ const proceduresSchema = __procedures(
 
 type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "tables"> & {
   tables: typeof tablesSchema.schemaType.tables & {
+    /** @deprecated Use `myHint` instead. This alias will be removed in the next major version. */
+    readonly "my_hint": Omit<typeof tablesSchema.schemaType.tables["myHint"], "accessorName"> & { readonly accessorName: "my_hint" };
     /** @deprecated Use `myKey` instead. This alias will be removed in the next major version. */
     readonly "my_key": Omit<typeof tablesSchema.schemaType.tables["myKey"], "accessorName"> & { readonly accessorName: "my_key" };
   };
@@ -134,6 +144,7 @@ const REMOTE_MODULE = {
 >;
 
 const tableAccessorAliases = {
+  "my_hint": "myHint",
   "my_key": "myKey",
 } as const;
 
@@ -155,12 +166,16 @@ function __withTableAccessorAliases<T extends object>(target: T, freeze = false)
 
 type __DbViewBase = __DbConnectionImpl<typeof REMOTE_MODULE>["db"];
 export type DbView = __DbViewBase & {
+  /** @deprecated Use `myHint` instead. This alias will be removed in the next major version. */
+  readonly "my_hint": __DbViewBase["myHint"];
   /** @deprecated Use `myKey` instead. This alias will be removed in the next major version. */
   readonly "my_key": __DbViewBase["myKey"];
 };
 
 type __TablesBase = __QueryBuilder<typeof tablesSchema.schemaType>;
 export type Tables = __TablesBase & {
+  /** @deprecated Use `myHint` instead. This alias will be removed in the next major version. */
+  readonly "my_hint": __TablesBase["myHint"];
   /** @deprecated Use `myKey` instead. This alias will be removed in the next major version. */
   readonly "my_key": __TablesBase["myKey"];
 };

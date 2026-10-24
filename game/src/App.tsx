@@ -52,14 +52,17 @@ export default function App() {
   const [seats] = useTable(tables.seat.where(r => r.matchId.eq(MATCH)));
   const [photos] = useTable(tables.photo.where(r => r.matchId.eq(MATCH)));
   const [myKeys] = useTable(tables.myKey);
+  const [myHints] = useTable(tables.myHint);
 
   const [error, setError] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [showHint, setShowHint] = useState(false);
   const camera = useRef<HTMLInputElement>(null);
   const joined = useRef(false);
 
   const round = rounds[0];
   const myKey = myKeys.find(k => k.matchId === MATCH);
+  const myHint = myHints.find(h => h.matchId === MATCH)?.hint;
   const mySeat = seats.find(s => identity && s.player?.isEqual(identity));
   const minutesLeft = useMinutesLeft(round?.startedAt.toDate().getTime(), round?.timerMin);
 
@@ -117,9 +120,16 @@ export default function App() {
 
       {myKey ? (
         <section className="card key">
-          <p className="label">{ROLE_LABEL[myKey.role] ?? myKey.role}</p>
+          <p className="label">{ROLE_LABEL[myKey.role] ?? 'Your part'}</p>
           <p className="big">{myKey.key}</p>
           <p className="muted">Read it out loud. The others hold the rest.</p>
+          {myHint && round.state !== 'done' && (
+            showHint ? (
+              <p className="hint">💡 {myHint}</p>
+            ) : (
+              <button className="link" onClick={() => setShowHint(true)}>💡 Need a hint?</button>
+            )
+          )}
         </section>
       ) : (
         <section className="card"><p className="muted">Joining as {title(AGENT)}…</p></section>

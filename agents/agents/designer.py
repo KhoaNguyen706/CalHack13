@@ -47,6 +47,8 @@ to pass it. Make checks about places and objects, never about how a person looks
 - No strangers' faces in photos; photos of the players themselves are fine. Ask owners before photographing pets.
 - Connection hook: it only works if they talk to each other. Give every player a personal part that involves \
 a teammate by name (`parts`, exactly one per player, using their agent_id).
+- Give every part a `hint`: one short nudge for that player if they get stuck (where to look, what to ask). It \
+helps without giving the answer away, and it is only shown to that player when they ask for it.
 - Use what you know: the players' first names and interests, and the facts about the place. If a step needs \
 a reference photo, put one URL from `reference_photos` in `reference_photo`, exactly as given; otherwise leave \
 it empty. Never invent URLs.
@@ -64,6 +66,7 @@ class Step(BaseModel):
 class Part(BaseModel):
     agent_id: str
     part: str
+    hint: str = ""  # a nudge for that player only, shown when they tap "Need a hint?"
 
 
 class Invented(BaseModel):
@@ -83,6 +86,8 @@ def validate(c: Invented, members: list[str], photos: set[str]) -> str | None:
         return "parts must have exactly one entry per member"
     if any(not p or len(p) > MAX_PART_CHARS for p in parts.values()):
         return "every part must be 1-280 characters"
+    if any(len(p.hint.strip()) > MAX_PART_CHARS for p in c.parts):
+        return "every hint must be at most 280 characters"
     if not 1 <= len(c.steps) <= 6 or any(not s.task.strip() or not s.check.strip() for s in c.steps):
         return "1-6 steps, each with a task and a check"
     if c.reference_photo and c.reference_photo not in photos:
@@ -100,6 +105,7 @@ def template(members: list[str], c: Invented, sources: list[str]) -> dict:
             "connection_hook": c.connection_hook.strip(),
             "steps": [{"id": f"s{i}", "task": s.task.strip(), "check": s.check.strip()} for i, s in enumerate(c.steps, 1)],
             "keys": {p.agent_id: p.part.strip() for p in c.parts},  # each player's own part
+            "hints": {p.agent_id: p.hint.strip() for p in c.parts if p.hint.strip()},  # private, like the parts
             "reference_photo": c.reference_photo or None,
             "answer": c.title.strip(),  # the game board reveals it at the end ("challenge complete! answer: …")
             "unlock": "every step's photo passes its check",
@@ -121,7 +127,14 @@ def fallback(players: list[dict], match_id: str = "") -> dict:
         connection_hook="Each person picks something for a teammate and tells them why.",
         steps=[Step(task=f"{names[a]} finds something {color} for {names[b]}.", check=f"A clearly {color} object is the main subject.") for a, b in pairs]
         + [Step(task=f"Group photo with all your {color} finds.", check=f"Several people together, holding or next to {color} objects.")],
-        parts=[Part(agent_id=a, part=f"Find something {color} that {names[b]} would like, and tell them why you picked it.") for a, b in pairs],
+        parts=[
+            Part(
+                agent_id=a,
+                part=f"Find something {color} that {names[b]} would like, and tell them why you picked it.",
+                hint=f"Ask {names[b]} what they're into first. Then look at signs, flowers, bikes, bags and doors.",
+            )
+            for a, b in pairs
+        ],
         timer_min=15,
     )
     return template(ids, c, [])

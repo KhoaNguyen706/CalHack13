@@ -541,7 +541,10 @@ class Coordinator:
             "kind": rnd.get("type", "split_riddle"),
             "timerMin": int(rnd.get("timer_min", TIMER_MIN)),
             "answer": str(rnd.get("answer", "")),
-            "seats": [{"agent_id": m, "role": match.roles.get(m, "player"), "key": rnd["keys"][m]} for m in match.members],
+            "seats": [
+                {"agent_id": m, "role": match.roles.get(m, "player"), "key": rnd["keys"][m], "hint": (rnd.get("hints") or {}).get(m) or ""}
+                for m in match.members
+            ],
         }
         try:
             await self.spacetime.call("start_round", args)

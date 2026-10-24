@@ -34,6 +34,8 @@ const seat = table(
 
 // Private: a key only reaches the phone holding that seat, so nobody can solve it alone.
 const seatKey = table({ name: 'seat_key' }, { seatId: t.string().primaryKey(), key: t.string() });
+// Private too: a nudge for that player's own part, which their phone shows only when they ask for it.
+const seatHint = table({ name: 'seat_hint' }, { seatId: t.string().primaryKey(), hint: t.string() });
 const roundSecret = table({ name: 'round_secret' }, { matchId: t.string().primaryKey(), answer: t.string() });
 
 const photo = table(
@@ -44,12 +46,13 @@ const photo = table(
 // Identities allowed to start rounds. The publisher is added on init.
 const coordinator = table({ name: 'coordinator' }, { identity: t.identity().primaryKey() });
 
-const spacetimedb = schema({ round, seat, seatKey, roundSecret, photo, coordinator });
+const spacetimedb = schema({ round, seat, seatKey, seatHint, roundSecret, photo, coordinator });
 export default spacetimedb;
 
 type Ctx = ReducerCtx<InferSchema<typeof spacetimedb>>;
 
-const SeatIn = t.object('SeatIn', { agentId: t.string(), role: t.string(), key: t.string() });
+const SeatIn = t.object('SeatIn', { agentId: t.string(), role: t.string(), key: t.string(), hint: t.string() }); // hint '' = none
+const HintCard = t.object('HintCard', { matchId: t.string(), agentId: t.string(), hint: t.string() });
 const KeyCard = t.object('KeyCard', { matchId: t.string(), agentId: t.string(), role: t.string(), key: t.string() });
 
 function seatIdOf(matchId: string, agentId: string) {
@@ -81,6 +84,7 @@ export const start_round = spacetimedb.reducer(
 
     for (const old of [...ctx.db.seat.matchId.filter(matchId)]) {
       ctx.db.seatKey.seatId.delete(old.seatId);
+      ctx.db.seatHint.seatId.delete(old.seatId);
       ctx.db.seat.seatId.delete(old.seatId);
     }
     ctx.db.round.matchId.delete(matchId);
@@ -93,6 +97,7 @@ export const start_round = spacetimedb.reducer(
       const seatId = seatIdOf(matchId, s.agentId);
       ctx.db.seat.insert({ seatId, matchId, agentId: s.agentId, role: s.role, player: undefined, checkedIn: false });
       ctx.db.seatKey.insert({ seatId, key: s.key });
+      if (s.hint) ctx.db.seatHint.insert({ seatId, hint: s.hint });
     }
   }
 );
@@ -108,6 +113,7 @@ export const drop_seat = spacetimedb.reducer({ matchId: t.string(), agentId: t.s
   const r = playingRound(ctx, matchId);
   const seatId = seatIdOf(matchId, agentId);
   ctx.db.seatKey.seatId.delete(seatId);
+  ctx.db.seatHint.seatId.delete(seatId);
   ctx.db.seat.seatId.delete(seatId);
   const left = [...ctx.db.seat.matchId.filter(matchId)];
   if (r.state === 'playing' && left.length > 0 && left.every(o => o.checkedIn)) {
@@ -164,4 +170,15 @@ export const my_key = spacetimedb.view({ name: 'my_key', public: true }, t.array
     if (k) keys.push({ matchId: s.matchId, agentId: s.agentId, role: s.role, key: k.key });
   }
   return keys;
+});
+
+// Each phone sees only the hint for the seat it holds (the page keeps it hidden until "Need a hint?").
+export const my_hint = spacetimedb.view({ name: 'my_hint', public: true }, t.array(HintCard), ctx => {
+  const hints = [];
+  for (const s of ctx.db.seat.iter()) {
+    if (!s.player?.isEqual(ctx.sender)) continue;
+    const h = ctx.db.seatHint.seatId.find(s.seatId);
+    if (h) hints.push({ matchId: s.matchId, agentId: s.agentId, hint: h.hint });
+  }
+  return hints;
 });

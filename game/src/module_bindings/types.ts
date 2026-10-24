@@ -15,6 +15,13 @@ export const Coordinator = __t.object("Coordinator", {
 });
 export type Coordinator = __Infer<typeof Coordinator>;
 
+export const HintCard = __t.object("HintCard", {
+  matchId: __t.string(),
+  agentId: __t.string(),
+  hint: __t.string(),
+});
+export type HintCard = __Infer<typeof HintCard>;
+
 export const KeyCard = __t.object("KeyCard", {
   matchId: __t.string(),
   agentId: __t.string(),
@@ -22,6 +29,9 @@ export const KeyCard = __t.object("KeyCard", {
   key: __t.string(),
 });
 export type KeyCard = __Infer<typeof KeyCard>;
+
+export const MyHint = __t.object("MyHint", {});
+export type MyHint = __Infer<typeof MyHint>;
 
 export const MyKey = __t.object("MyKey", {});
 export type MyKey = __Infer<typeof MyKey>;
@@ -60,10 +70,17 @@ export const Seat = __t.object("Seat", {
 });
 export type Seat = __Infer<typeof Seat>;
 
+export const SeatHint = __t.object("SeatHint", {
+  seatId: __t.string(),
+  hint: __t.string(),
+});
+export type SeatHint = __Infer<typeof SeatHint>;
+
 export const SeatIn = __t.object("SeatIn", {
   agentId: __t.string(),
   role: __t.string(),
   key: __t.string(),
+  hint: __t.string(),
 });
 export type SeatIn = __Infer<typeof SeatIn>;
 

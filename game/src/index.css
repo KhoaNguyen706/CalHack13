@@ -399,3 +399,12 @@ button.link {
 .install button.link {
   align-self: flex-start;
 }
+
+/* A player's own hint, revealed on "Need a hint?" */
+.hint {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg);
+  border: 1px dashed var(--accent);
+  line-height: 1.4;
+}

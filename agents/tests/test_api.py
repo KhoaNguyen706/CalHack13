@@ -195,6 +195,7 @@ def test_challenge_status_and_photo_checks(client, coord):
     status = client.get("/users/jess").json()
     assert status["my_part"] == challenge["round"]["keys"]["jess"] and "Phong" in status["my_part"]
     assert "keys" not in status["challenge"] and len(status["challenge"]["steps"]) == 3  # others' parts hidden
+    assert status["my_hint"] == challenge["round"]["hints"]["jess"] and "hints" not in status["challenge"]
     assert status["progress"] == {"steps": [{**s, "passed": False, "reason": None} for s in status["progress"]["steps"]], "done": False}
     tick(client)
     assert any(t.startswith("Everyone's in!") and "Your part" in t for t in lines(client, "jess"))

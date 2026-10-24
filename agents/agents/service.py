@@ -196,6 +196,7 @@ class AgentsService:
             "is_host": bool(match and match.get("host") == me),
             "needs_accept": bool(match and match["state"] in ("inviting", "pending") and me not in match["accepted"]),
             "my_part": (rnd.get("keys") or {}).get(me),
+            "my_hint": (rnd.get("hints") or {}).get(me),
             "challenge": public_round(rnd) if rnd else None,
             "progress": self.progress(match["match_id"], rnd) if rnd else None,
         }

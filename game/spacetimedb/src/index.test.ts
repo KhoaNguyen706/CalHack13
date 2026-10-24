@@ -17,9 +17,9 @@ const ROUND = {
   timerMin: 15,
   answer: 'apify_booth',
   seats: [
-    { agentId: 'linh', role: 'riddles', key: "This sponsor's tool helps you scrape the web." },
-    { agentId: 'marcus', role: 'map', key: 'Their booth is near the snacks.' },
-    { agentId: 'priya', role: 'camera', key: 'Ask them: what is the coolest thing built with your tool?' },
+    { agentId: 'linh', role: 'riddles', key: "This sponsor's tool helps you scrape the web.", hint: 'Think of data, not spiders.' },
+    { agentId: 'marcus', role: 'map', key: 'Their booth is near the snacks.', hint: '' },
+    { agentId: 'priya', role: 'camera', key: 'Ask them: what is the coolest thing built with your tool?', hint: '' },
   ],
 };
 
@@ -88,6 +88,13 @@ describe('three-key round', () => {
     test.withReducerTx(priya, ctx => game.submit_photo(ctx, { matchId: 'm1', url: 'https://x.test/p.jpg' }));
     expect(round(test)).toMatchObject({ state: 'done', answer: 'apify_booth' });
     expect(test.db.photo.matchId.find('m1')?.url).toBe('https://x.test/p.jpg');
+  });
+
+  it('a hint stays private to its seat, and a player without one gets none', () => {
+    const test = started();
+    expect(test.db.seatHint.seatId.find('m1:linh')?.hint).toBe('Think of data, not spiders.');
+    expect(test.db.seatHint.seatId.find('m1:marcus')).toBeNull();
+    expect(JSON.stringify([...test.db.seat.iter()])).not.toContain('spiders');
   });
 
   it('a player who leaves loses their seat; the rest can still unlock the photo', () => {

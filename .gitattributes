@@ -1,1 +1,5 @@
 *.sh text eol=lf
+
+# Design.html is the designer's exported page (12.5 MB, fonts and images packed inside). Keep it out of
+# GitHub's language bar, which counts bytes, so the repo shows its real languages (Python, TypeScript).
+Design.html linguist-documentation

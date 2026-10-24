@@ -71,7 +71,7 @@ def slug_id(text: str) -> str:
 
 def public_round(rnd: dict) -> dict:
     """The challenge as every player may see it: everything except the other players' parts."""
-    keys = ("type", "title", "goal", "connection_hook", "steps", "reference_photo", "timer_min", "unlock")
+    keys = ("type", "title", "goal", "connection_hook", "steps", "reference_photo", "timer_min", "unlock", "meet")
     return {k: rnd.get(k) for k in keys}
 
 
@@ -418,7 +418,7 @@ class AgentsService:
         match_id = (body.get("match") or {}).get("match_id", "")
         challenge, how = await designer.design(
             self.claude, self.s.designer_model, self.s.design_budget_s, players, place, f"{now:%A}, {now.hour % 12 or 12}:{now:%M %p}",
-            match_id, self.booths,
+            match_id, self.booths, self.s.meeting_point,
         )
         challenge["round"]["designed_by"] = how
         log.info("designed %r for %s via %s", challenge["round"]["title"], challenge["group"], how)
@@ -578,10 +578,15 @@ class AgentsService:
                 for a in people:
                     others = " and ".join(self.display(o) for o in members if o != a)
                     part = (rnd.get("keys") or {}).get(a, "")
+                    meet = rnd.get("meet") or {}
+                    where = (
+                        f" Meet at {meet['spot']}. Look for phones showing {meet['emoji']} {meet['sign']}, and hold yours up too."
+                        if meet.get("spot") else ""
+                    )
                     if rnd.get("goal"):
-                        text = f"Everyone's in! You're meeting {others}. {rnd.get('title', 'Your challenge')}: {rnd['goal']} Your part: “{part}”"
+                        text = f"Everyone's in! You're meeting {others}.{where} {rnd.get('title', 'Your challenge')}: {rnd['goal']} Your part: “{part}”"
                     else:
-                        text = f"Everyone's in! You're meeting {others}. Your key: “{part}” Read it out loud to your group."
+                        text = f"Everyone's in! You're meeting {others}.{where} Your key: “{part}” Read it out loud to your group."
                     self.notify(a, f"{mid}:challenge", text)
             elif state == "done":
                 for a in people:

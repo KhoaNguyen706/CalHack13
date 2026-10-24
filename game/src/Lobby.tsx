@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AGENTS, API } from './config.ts';
 import InstallHint from './InstallHint.tsx';
-import { CardHead, Icon, Pebble, PieceIcon, PRIVACY_RULES, Reconnecting, Seats, Walrus, type Seat } from './ui.tsx';
+import { CardHead, Icon, MeetCard, Pebble, PieceIcon, PRIVACY_RULES, Reconnecting, Seats, SignScreen, Walrus, type Meet, type Seat } from './ui.tsx';
 
 // Groups are 2 to 5 (2 for a quick round with one other person). The host can start early once this many accepted;
 // the coordinator's MIN_GROUP_SIZE has the final say on both.
@@ -21,7 +21,7 @@ type Match = {
 type Shared = { free: string; area: string; interests: string[]; skills: string[] };
 type Status = {
   agent_id: string; name: string; transcript: Line[]; match: Match | null; is_host: boolean; needs_accept: boolean;
-  my_part: string | null; challenge: { title?: string; goal?: string } | null; consented: boolean; would_share: Shared;
+  my_part: string | null; challenge: { title?: string; goal?: string; meet?: Meet | null } | null; consented: boolean; would_share: Shared;
   last_match: string | null;
 };
 
@@ -441,6 +441,7 @@ function MatchCard({ m, me, status, onAccept, onStart, onCancel, onLeave }: Matc
   const full = m.members.length >= seats;
   const joined = m.members.length;
   const seatList = seatsFor(m, me);
+  const [sign, setSign] = useState(false);
   const meta = (
     <div className="meta">
       <div><Icon name="clock" /><span>{when(m.window)}</span></div>
@@ -480,6 +481,17 @@ function MatchCard({ m, me, status, onAccept, onStart, onCancel, onLeave }: Matc
           <button className="btn primary wide" onClick={() => onAccept(true)}>Accept</button>
         </div>
       </section>
+    );
+  }
+
+  // Everyone's in and the challenge is ready: first, where to meet and how to spot each other.
+  if (m.state === 'confirmed' && status.challenge?.meet) {
+    return (
+      <>
+        <p className="line-ok"><Icon name="checkCircle" size={20} /><span>Everyone's in! Go meet your group.</span></p>
+        <MeetCard meet={status.challenge.meet} onShow={() => setSign(true)} />
+        {sign && <SignScreen meet={status.challenge.meet} onClose={() => setSign(false)} />}
+      </>
     );
   }
 

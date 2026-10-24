@@ -46,6 +46,9 @@ class Settings:
     # Coarse area every agent checks in with. Matching only groups agents in the same area.
     area: str = _env("EVENT_AREA", "Palace of Fine Arts")
     tz: str = _env("EVENT_TZ", "America/Los_Angeles")
+    # Where every new group meets first, e.g. "the rotunda steps, facing the lagoon". Unset: Claude picks a spot
+    # from the place facts and booths, else the venue's main entrance.
+    meeting_point: str = _env("MEETING_POINT")
 
     # Sign in with SpacetimeAuth: the client id from the database's SpacetimeAuth dashboard (public), plus its
     # secret if the client is confidential. Unset: only the name sign-in works.

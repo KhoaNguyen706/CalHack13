@@ -20,7 +20,16 @@ from .place import Place
 log = logging.getLogger(__name__)
 
 MAX_PART_CHARS = 280
+MAX_SPOT_CHARS = 140
+DEFAULT_SPOT = "the main entrance"
 COLORS = ("red", "yellow", "blue", "green", "orange", "purple", "pink", "white")
+
+# The group's sign: every phone shows the same color and name full screen, so strangers find each other in a crowd.
+SIGN_COLORS = (
+    ("Teal", "#2DD4BF"), ("Coral", "#FB7185"), ("Sunny", "#FACC15"), ("Violet", "#A78BFA"),
+    ("Lime", "#A3E635"), ("Sky", "#38BDF8"), ("Tangerine", "#FB923C"), ("Pink", "#F472B6"),
+)
+SIGN_ANIMALS = (("Otter", "🦦"), ("Fox", "🦊"), ("Panda", "🐼"), ("Owl", "🦉"), ("Penguin", "🐧"), ("Koala", "🐨"), ("Frog", "🐸"), ("Whale", "🐳"))
 
 SYSTEM = """You invent one short outdoor challenge for {n} people who just met at {event} \
 ({location}, {city}). It is {time}. The point: strangers start talking, laugh, and want to meet again.
@@ -55,6 +64,9 @@ it empty. Never invent URLs.
 - Sponsor booths at the venue (`sponsor_booths`) can be spots too, e.g. "ask the sponsor a question, then a group \
 photo there". Only send people to a booth whose `location` is given; never make one up.
 - Refer to players by name or "they"; never guess anyone's gender.
+- `meeting_point`: where they meet first, before step 1, so strangers can find each other in a crowd. One exact, \
+easy-to-find public spot within a 2-minute walk: a named entrance, landmark, statue or a booth whose `location` \
+is given. Never a vague area ("near the lawn"). If `suggested_meeting_point` is given, use it as it is.
 - Plain, warm, short sentences. Title: 2-5 words."""
 
 
@@ -77,6 +89,14 @@ class Invented(BaseModel):
     parts: list[Part]
     timer_min: int
     reference_photo: str | None = None
+    meeting_point: str = ""  # where the group meets first; empty or too long → the default spot
+
+
+def meetup(match_id: str, spot: str) -> dict:
+    """Where to meet and the group's sign, the same for every player. The sign comes from the match id, not Claude."""
+    n = sum(map(ord, match_id or "x"))
+    (color, hex_), (animal, emoji) = SIGN_COLORS[n % len(SIGN_COLORS)], SIGN_ANIMALS[(n // len(SIGN_COLORS)) % len(SIGN_ANIMALS)]
+    return {"spot": spot, "sign": f"{color} {animal}", "emoji": emoji, "color": hex_}
 
 
 def validate(c: Invented, members: list[str], photos: set[str]) -> str | None:
@@ -95,7 +115,7 @@ def validate(c: Invented, members: list[str], photos: set[str]) -> str | None:
     return None
 
 
-def template(members: list[str], c: Invented, sources: list[str]) -> dict:
+def template(members: list[str], c: Invented, sources: list[str], meet: dict) -> dict:
     return {
         "group": members,
         "round": {
@@ -111,11 +131,12 @@ def template(members: list[str], c: Invented, sources: list[str]) -> dict:
             "unlock": "every step's photo passes its check",
             "timer_min": max(5, min(30, c.timer_min)),
             "sources": sources,
+            "meet": meet,  # public: every player sees the same spot and sign
         },
     }
 
 
-def fallback(players: list[dict], match_id: str = "") -> dict:
+def fallback(players: list[dict], match_id: str = "", spot: str = "") -> dict:
     """A color hunt that works for any group of 2+: each person finds one thing for the next."""
     color = COLORS[sum(map(ord, match_id or "x")) % len(COLORS)]
     ids = [p["agent_id"] for p in players]
@@ -137,7 +158,7 @@ def fallback(players: list[dict], match_id: str = "") -> dict:
         ],
         timer_min=15,
     )
-    return template(ids, c, [])
+    return template(ids, c, [], meetup(match_id, spot or DEFAULT_SPOT))
 
 
 async def design(
@@ -149,12 +170,14 @@ async def design(
     when: str,
     match_id: str = "",
     booths: list[dict] | None = None,
+    meeting_point: str = "",
 ) -> tuple[dict, str]:
     """players: [{agent_id, name, interests, skills}]; booths: [{sponsor, what_it_does, location}].
-    Returns (challenge, how) where how says who wrote it."""
+    meeting_point: an organizer's pick (MEETING_POINT); it beats Claude's. Returns (challenge, how)."""
     ids = [p["agent_id"] for p in players]
+    default = meeting_point or f"the main entrance of the {place.location}"
     if claude is None or not ids:
-        return fallback(players, match_id), "built-in color hunt (Claude off)"
+        return fallback(players, match_id, default), "built-in color hunt (Claude off)"
 
     system = SYSTEM.format(n=len(ids), event=place.event, location=place.location, city=place.city, time=when)
     content = json.dumps(
@@ -163,6 +186,7 @@ async def design(
             "facts_about_the_place": [f.text for f in place.facts],
             "reference_photos": [{"url": i.url, "about": i.about} for i in place.images],
             "sponsor_booths": booths or [],
+            **({"suggested_meeting_point": meeting_point} if meeting_point else {}),
         },
         indent=1,
     )
@@ -172,13 +196,16 @@ async def design(
         )
     except Exception as e:
         log.warning("designer fell back: %r", e)
-        return fallback(players, match_id), "built-in color hunt (designer error)"
+        return fallback(players, match_id, default), "built-in color hunt (designer error)"
     if c is None:
-        return fallback(players, match_id), "built-in color hunt (declined)"
+        return fallback(players, match_id, default), "built-in color hunt (declined)"
     if problem := validate(c, ids, {i.url for i in place.images}):
         log.warning("designer challenge rejected: %s", problem)
-        return fallback(players, match_id), f"built-in color hunt ({problem})"
+        return fallback(players, match_id, default), f"built-in color hunt ({problem})"
 
     sources = sorted({f.source for f in place.facts if f.source} | ({i.source for i in place.images if i.url == c.reference_photo}))
     how = "Claude + scraped place info" if place.scraped else "Claude + built-in place info"
-    return template(ids, c, sources), how
+    spot = c.meeting_point.strip()
+    if meeting_point or not spot or len(spot) > MAX_SPOT_CHARS:
+        spot = default
+    return template(ids, c, sources, meetup(match_id, spot)), how

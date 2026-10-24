@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useReducer, useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { reducers, tables } from './module_bindings';
 import { AGENTS, API } from './config.ts';
-import { CardHead, Icon, Pebble, Walrus } from './ui.tsx';
+import { CardHead, Icon, MeetCard, Pebble, SignScreen, Walrus, type Meet } from './ui.tsx';
 
 const params = new URLSearchParams(location.search);
 const MATCH = params.get('match') ?? '';
@@ -16,7 +16,7 @@ type Step = { id: string; task: string; passed: boolean; reason: string | null }
 type View = {
   state: string;
   members: { agent_id: string; name: string }[];
-  challenge: { title?: string; goal?: string; steps?: { id: string; task: string }[] } | null;
+  challenge: { title?: string; goal?: string; steps?: { id: string; task: string }[]; meet?: Meet | null } | null;
   progress: { steps: Step[]; done: boolean } | null;
 };
 type Summary = { waiting_for: string[]; mutual_meet_again: boolean; my_matches: string[]; share_ok: boolean };
@@ -144,6 +144,7 @@ export default function App() {
 
   const [error, setError] = useState('');
   const [showHint, setShowHint] = useState(false);
+  const [sign, setSign] = useState(false); // the group's sign, full screen
   const [notQuite, setNotQuite] = useState<Record<string, string>>({}); // step -> why its last photo didn't pass
   const joined = useRef(false);
 
@@ -230,10 +231,15 @@ export default function App() {
   const unlocked = round.state === 'unlocked';
   const passed = steps.filter(s => s.passed).length;
   const here = seats.filter(s => s.checkedIn).length;
+  const meet = view?.challenge?.meet;
 
   return (
     <Shell>
       <Top heading={view?.challenge?.title ?? 'Challenge'} minutes={minutesLeft} />
+
+      {/* Until everyone's here: where to meet and the sign to hold up, before anything else. */}
+      {meet && round.state === 'playing' && <MeetCard meet={meet} onShow={() => setSign(true)} />}
+      {meet && sign && <SignScreen meet={meet} onClose={() => setSign(false)} />}
 
       {myKey ? (
         <section className="card hero">
@@ -254,7 +260,7 @@ export default function App() {
         </div>
         <ol className="step-list">
           <li className={unlocked ? 'done' : 'cur'}>
-            <p className="step"><span className="dot">{unlocked && <Icon name="check" size={14} />}</span>Meet your group and tap We're here</p>
+            <p className="step"><span className="dot">{unlocked && <Icon name="check" size={14} />}</span>{meet ? `Meet at ${meet.spot} and tap We're here` : "Meet your group and tap We're here"}</p>
           </li>
           {steps.map(s => (
             <li key={s.id} className={s.passed ? 'done' : unlocked ? 'cur' : 'lock'}>

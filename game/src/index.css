@@ -1303,6 +1303,103 @@ details[open].card summary::after {
   color: var(--muted);
 }
 
+/* --- Meeting point and the group's sign ----------------------------------- */
+
+.meet h2 {
+  font-size: 23px;
+}
+
+/* Spots read "the rotunda steps…" mid-sentence; as a heading they start with a capital. */
+.meet h2::first-letter {
+  text-transform: uppercase;
+}
+
+.sign-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sign-row > div {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sign-row b {
+  font-family: var(--display);
+  font-size: 19px;
+  color: var(--title);
+}
+
+.sign-row span {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.sign-chip {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+}
+
+.sign-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  border: 0;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  color: #07070a;
+  cursor: pointer;
+  animation: sign-glow 2.4s ease-in-out infinite;
+}
+
+.sign-screen b {
+  font-family: var(--display);
+  font-size: clamp(44px, 14vw, 96px);
+  line-height: 1.05;
+}
+
+.sign-screen span:not(.sign-emoji) {
+  font-size: 20px;
+  font-weight: 700;
+  max-width: 340px;
+}
+
+.sign-screen small {
+  position: absolute;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  font-size: 15px;
+  opacity: 0.7;
+}
+
+.sign-emoji {
+  font-size: clamp(110px, 38vw, 220px);
+  line-height: 1;
+}
+
+@keyframes sign-glow {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.12);
+  }
+}
+
 /* --- Install hint --------------------------------------------------------- */
 
 .install ol {

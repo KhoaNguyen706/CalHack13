@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 
 import pytest
@@ -74,3 +75,39 @@ def test_photo_check_needs_one_image():
     with pytest.raises(ValueError):
         PhotoCheck(step="s1", image_url="https://x/y.jpg", image_base64="abc")
     assert PhotoCheck(step="s1", image_url="https://x/y.jpg").media_type == "image/jpeg"
+
+
+def test_meetup_sign_is_the_same_for_the_whole_group():
+    a, b = designer.meetup("m1", "the rotunda steps"), designer.meetup("m1", "the rotunda steps")
+    assert a == b and a["spot"] == "the rotunda steps"
+    assert a["sign"].split()[0] in {c for c, _ in designer.SIGN_COLORS} and a["color"].startswith("#") and a["emoji"]
+    assert len({designer.meetup(f"m{i}", "x")["sign"] for i in range(40)}) > 8  # groups get different signs
+
+
+def test_fallback_meets_at_the_default_spot():
+    players = [{"agent_id": a, "name": a.title()} for a in ("phong", "linh")]
+    assert designer.fallback(players, "m1")["round"]["meet"]["spot"] == designer.DEFAULT_SPOT
+    assert designer.fallback(players, "m1", "the fountain")["round"]["meet"]["spot"] == "the fountain"
+
+
+def design_with(monkeypatch, spot_from_claude: str, organizer: str = ""):
+    from agents.place import Place
+
+    members = {"phong": "Find one for Linh.", "linh": "Find one for Phong."}
+    c = invented(members).model_copy(update={"meeting_point": spot_from_claude})
+
+    async def parse(*_, **__):
+        return c
+
+    monkeypatch.setattr(designer.llm, "parse", parse)
+    place = Place(event="Cal Hacks 13", location="Palace of Fine Arts", city="San Francisco", hour="2026-10-24T14", facts=[], images=[], scraped=False, fetched_at=0)
+    players = [{"agent_id": a, "name": a.title()} for a in members]
+    challenge, _ = asyncio.run(designer.design(object(), "m", 5, players, place, "Saturday", "m1", [], organizer))
+    return challenge["round"]["meet"]["spot"]
+
+
+def test_meeting_point_comes_from_the_organizer_then_claude_then_the_entrance(monkeypatch):
+    assert design_with(monkeypatch, "the Apify booth, near the snacks") == "the Apify booth, near the snacks"
+    assert design_with(monkeypatch, "the Apify booth", organizer="the rotunda steps") == "the rotunda steps"
+    assert design_with(monkeypatch, "") == "the main entrance of the Palace of Fine Arts"
+    assert design_with(monkeypatch, "x" * 200) == "the main entrance of the Palace of Fine Arts"

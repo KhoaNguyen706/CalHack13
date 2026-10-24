@@ -1,5 +1,6 @@
 // Shared pieces of the Krew design: Pebble (your agent), the walrus (the Coordinator), puzzle-piece seats around
 // the walrus, and the small line icons. Colors come from the CSS tokens in index.css, so dark and light both work.
+import { useEffect } from 'react';
 
 // The puzzle piece every person is drawn as. Others stay a letter on a piece until the whole group accepts.
 const PIECE = 'M -34 -40 L 34 -40 Q 40 -40 40 -34 L 40 -12 A 14 14 0 1 1 40 12 L 40 34 Q 40 40 34 40 L -34 40 Q -40 40 -40 34 L -40 -34 Q -40 -40 -34 -40 Z';
@@ -234,6 +235,45 @@ export function Reconnecting({ offline, onRetry }: { offline: boolean; onRetry: 
       <div className="progress"><div /></div>
       <button className="btn primary" onClick={onRetry}>Try now</button>
     </section>
+  );
+}
+
+// Where a new group meets first, and the sign that lets strangers find each other in a crowd.
+export type Meet = { spot: string; sign: string; emoji: string; color: string };
+
+export function MeetCard({ meet, onShow }: { meet: Meet; onShow: () => void }) {
+  return (
+    <section className="card meet">
+      <CardHead eyebrow="Meet here first" title={meet.spot} />
+      <div className="sign-row">
+        <span className="sign-chip" style={{ background: meet.color }}>{meet.emoji}</span>
+        <div>
+          <b>{meet.sign}</b>
+          <span>Your group's sign. Look for phones showing it, and hold yours up too.</span>
+        </div>
+      </div>
+      <button className="btn primary" onClick={onShow}>Show my sign</button>
+    </section>
+  );
+}
+
+// The sign, full screen and bright, to hold up. Keeps the screen awake while it's open; tap anywhere to close.
+export function SignScreen({ meet, onClose }: { meet: Meet; onClose: () => void }) {
+  useEffect(() => {
+    let lock: { release: () => Promise<void> } | undefined;
+    const nav = navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<{ release: () => Promise<void> }> } };
+    nav.wakeLock?.request('screen').then(l => (lock = l)).catch(() => {});
+    return () => {
+      lock?.release().catch(() => {});
+    };
+  }, []);
+  return (
+    <button className="sign-screen" style={{ background: meet.color }} onClick={onClose} aria-label={`${meet.sign}. Tap to close`}>
+      <span className="sign-emoji" aria-hidden="true">{meet.emoji}</span>
+      <b>{meet.sign}</b>
+      <span>Meet at {meet.spot}</span>
+      <small>Tap to close</small>
+    </button>
   );
 }
 

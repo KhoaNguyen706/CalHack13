@@ -32,6 +32,17 @@ function apply(b: Board, e: LogEvent): [Board, Pulse[]] {
   };
   if (e.text === 'demo reset') return [EMPTY, []];
   if (e.kind === 'coordinator' && d.agent_id) return [{ ...b, agents: { ...b.agents, [d.agent_id]: 'pool' } }, [{ id: e.seq, agent: d.agent_id, out: false }]];
+  // Host-led challenges: the host's group grows as invitees say yes, and shrinks when one backs out.
+  if (d.host && d.match_id) {
+    const g: Group = b.groups[d.match_id] ?? { members: [d.host], state: 'proposed' };
+    const withMembers = (members: string[], agents: Board['agents']) => ({ ...b, agents, groups: { ...b.groups, [d.match_id]: { ...g, members } } });
+    if (d.invited) {
+      return [{ ...withMembers(g.members, set(d.invited, 'asked')), considering: d.invited }, d.invited.map((m: string, i: number) => ({ id: e.seq * 10 + i, agent: m, out: true }))];
+    }
+    if (d.joined) return [withMembers([...g.members, d.joined], { ...b.agents, [d.joined]: 'grouped' }), [{ id: e.seq, agent: d.joined, out: false }]];
+    if (d.left) return [withMembers(g.members.filter(m => m !== d.left), { ...b.agents, [d.left]: 'pool' }), []];
+    return b.groups[d.match_id] ? [b, []] : [withMembers(g.members, { ...b.agents, [d.host]: 'grouped' }), []];
+  }
   if (e.kind === 'match' && d.members) {
     return [{ ...b, agents: set(d.members, 'asked'), considering: d.members }, d.members.map((m: string, i: number) => ({ id: e.seq * 10 + i, agent: m, out: true }))];
   }

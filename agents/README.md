@@ -41,8 +41,8 @@ CHALLENGE_DESIGNER_URL=http://localhost:8100/challenge .venv/bin/python -m uvico
 Fewer real people than you want for a rehearsal? `POST /contexts/seed?shift_to_now=true` checks the unclaimed
 contexts in as stand-in agents, which accept on their own.
 
-**Waiting on the coordinator:** `POST /challenges` (start a challenge for N people, invite the rest), see
-`../coordinator-improvements.md`. Until it exists, Start falls back to the coordinator's `/matching/run`.
+Start calls the coordinator's `POST /challenges` (start a challenge for N people, invite the rest). Against an older
+coordinator without that route, it falls back to `/matching/run`.
 
 ## Env
 

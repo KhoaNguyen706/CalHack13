@@ -2,6 +2,9 @@
 
 For: Khoa (coordinator). From: the Agents and AI side.
 
+**Status:** done. Points 1-10 and 12 are in the coordinator (see `coordinator/README.md`, "Host-led challenges").
+Point 11 (showing photo-challenge steps on the live board) is still open.
+
 **What changes.** The person who starts a challenge picks the group size, 3 to 5 people. The coordinator
 then invites other people's agents until the group is full. This replaces "split the pool into groups of 3".
 The challenge itself is now invented by the AI for whoever joins (photo hunts, checkpoint runs), so the fixed

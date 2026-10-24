@@ -11,6 +11,7 @@ from .broker import Broker
 from .events import EventLog
 from .matching import Candidate, candidate_groups, overlap, pick
 from .models import Accept, Agent, CheckIn, Match, MatchState, Window
+from .spacetime import Spacetime, SpacetimeError, option
 from .store import Store
 
 log = logging.getLogger(__name__)
@@ -70,6 +71,7 @@ class Coordinator:
         http: httpx.AsyncClient,
         claude: anthropic.AsyncAnthropic | None,
         challenge_url: str | None = None,
+        spacetime: Spacetime | None = None,
     ):
         self.store = store
         self.events = events
@@ -77,7 +79,9 @@ class Coordinator:
         self.http = http
         self.claude = claude
         self.challenge_url = challenge_url
+        self.spacetime = spacetime
         self._match_lock = asyncio.Lock()
+        self._seen: dict[str, set[str]] = {}  # per playing match: who checked in, plus "unlocked"
         self._tasks: set[asyncio.Task] = set()
 
     # --- gateway ---------------------------------------------------------------
@@ -239,6 +243,11 @@ class Coordinator:
     # --- challenge -------------------------------------------------------------
 
     async def design_challenge(self, match: Match) -> Match:
+        """Get the round from the challenge designer, then open it on the live game board."""
+        match = await self._fetch_challenge(match)
+        return await self.start_game(match.match_id)
+
+    async def _fetch_challenge(self, match: Match) -> Match:
         """Ask the challenge designer (Claude + Apify, agents team) for the round; fall back to the demo round."""
         if self.challenge_url:
             members = [
@@ -269,3 +278,59 @@ class Coordinator:
             "challenge", f"secret spot chosen · {len(keys)} keys sent · timer {timer} min", match_id=match_id
         )
         return match
+
+    # --- live game (SpacetimeDB) -----------------------------------------------
+
+    async def start_game(self, match_id: str) -> Match:
+        """Open the round on SpacetimeDB and mark the match playing. Without SpacetimeDB it stays confirmed."""
+        match = self.match(match_id)
+        if self.spacetime is None or not match.challenge:
+            return match
+        rnd = match.challenge["round"]
+        args = {
+            "matchId": match_id,
+            "kind": rnd.get("type", "split_riddle"),
+            "timerMin": int(rnd.get("timer_min", TIMER_MIN)),
+            "answer": str(rnd.get("answer", "")),
+            "seats": [{"agent_id": m, "role": match.roles[m], "key": rnd["keys"][m]} for m in match.members],
+        }
+        try:
+            await self.spacetime.call("start_round", args)
+        except (httpx.HTTPError, SpacetimeError) as e:
+            log.warning("start_round failed: %s", e)
+            self.events.emit("game", "live board unavailable · round not started", match_id=match_id)
+            return match
+        self._seen[match_id] = set()
+        self.events.emit("game", f"round live · {len(match.members)} phones can join", match_id=match_id)
+        return self.set_state(match_id, MatchState.playing) if match.state == MatchState.confirmed else match
+
+    async def poll_games(self) -> None:
+        """Mirror the live board onto the negotiation log; a finished round marks its match done."""
+        playing = {m.match_id for m in self.store.matches.values() if m.state == MatchState.playing}
+        if self.spacetime is None or not playing:
+            return
+        seats = await self.spacetime.sql("SELECT * FROM seat")
+        rounds = await self.spacetime.sql("SELECT * FROM round")
+        for s in seats:
+            seen = self._seen.setdefault(s["match_id"], set())
+            if s["match_id"] in playing and s["checked_in"] and s["agent_id"] not in seen:
+                seen.add(s["agent_id"])
+                self.events.emit("game", f"{name(s['agent_id'])}: we're here ✓", match_id=s["match_id"], agent_id=s["agent_id"])
+        for r in rounds:
+            mid, seen = r["match_id"], self._seen.setdefault(r["match_id"], set())
+            if mid not in playing:
+                continue
+            if r["state"] in ("unlocked", "done") and "unlocked" not in seen:
+                seen.add("unlocked")
+                self.events.emit("game", "everyone's here → group photo unlocked", match_id=mid)
+            if r["state"] == "done":
+                self.events.emit("game", f"photo in · challenge complete! answer: {option(r['answer'])}", match_id=mid)
+                self.set_state(mid, MatchState.done)
+
+    async def watch_games(self, interval: float = 1.5) -> None:
+        while True:
+            try:
+                await self.poll_games()
+            except (httpx.HTTPError, SpacetimeError, KeyError, IndexError) as e:
+                log.warning("game poll failed: %s", e)
+            await asyncio.sleep(interval)

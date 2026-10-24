@@ -1,0 +1,149 @@
+:root {
+  --bg: #f6f7f9;
+  --card: #ffffff;
+  --text: #15171a;
+  --muted: #5f6670;
+  --accent: #2f6fed;
+  --accent-text: #ffffff;
+  --ok: #1f9d55;
+  --border: #e3e6ea;
+  --error: #c62828;
+  color-scheme: light dark;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111316;
+    --card: #1b1e23;
+    --text: #eef0f3;
+    --muted: #9aa3ad;
+    --accent: #5b8cff;
+    --ok: #3ccf7f;
+    --border: #2a2f36;
+    --error: #ff6b6b;
+  }
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 20px 16px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+h1 {
+  font-size: 1.4rem;
+}
+
+.pill {
+  font-size: 0.85rem;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.key {
+  border-color: var(--accent);
+}
+
+.label {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.big {
+  font-size: 1.3rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.board {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.board li {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+}
+
+.board li.here {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+button.primary {
+  font: inherit;
+  font-size: 1.1rem;
+  font-weight: 600;
+  padding: 16px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--accent);
+  color: var(--accent-text);
+  cursor: pointer;
+}
+
+button.primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+input {
+  font: inherit;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  width: 100%;
+}
+
+.done img {
+  width: 100%;
+  border-radius: 10px;
+}
+
+.error {
+  color: var(--error);
+}

@@ -1,7 +1,10 @@
 """HTTP + WebSocket surface of the coordinator. Run: uvicorn coordinator.main:app --reload"""
 
+import asyncio
+import contextlib
 import json
 import os
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -14,6 +17,7 @@ from .broker import Broker
 from .coordinator import Conflict, Coordinator, NotFound
 from .events import EventLog
 from .models import Accept, Agent, Ask, CheckIn, Match, MatchState, Question, Reply, StateChange
+from .spacetime import Spacetime
 from .store import Store
 
 SEEDS = Path(__file__).parent.parent / "seeds" / "personas.json"
@@ -28,11 +32,23 @@ def make_claude() -> anthropic.AsyncAnthropic | None:
         return None
 
 
+def make_spacetime(http: httpx.AsyncClient) -> Spacetime | None:
+    """Live game board. The token must be the identity that published game/spacetimedb
+    (`spacetime login show --token`), since only it may start rounds."""
+    token = os.environ.get("SPACETIME_TOKEN")
+    if not token:
+        return None
+    url = os.environ.get("SPACETIME_URL", "http://127.0.0.1:3000")
+    return Spacetime(http, url, os.environ.get("SPACETIME_DB", "threekey"), token)
+
+
 def create_app(
     db_path: str = os.environ.get("COORDINATOR_DB", "coordinator.db"),
     claude: anthropic.AsyncAnthropic | None = None,
     use_claude: bool = True,
     reply_timeout: float = float(os.environ.get("REPLY_TIMEOUT_S", "20")),
+    spacetime: Callable[[httpx.AsyncClient], Spacetime | None] = make_spacetime,
+    game_poll_s: float = 1.5,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -44,8 +60,13 @@ def create_app(
                 http=http,
                 claude=claude or (make_claude() if use_claude else None),
                 challenge_url=os.environ.get("CHALLENGE_DESIGNER_URL"),
+                spacetime=spacetime(http),
             )
+            watcher = asyncio.create_task(app.state.coord.watch_games(game_poll_s))
             yield
+            watcher.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await watcher
 
     app = FastAPI(title="AI Coordination Layer", lifespan=lifespan)
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -72,7 +93,13 @@ def create_app(
     @app.get("/health")
     async def health() -> dict:
         c = coord()
-        return {"ok": True, "agents": len(c.store.agents), "matches": len(c.store.matches), "claude": c.claude is not None}
+        return {
+            "ok": True,
+            "agents": len(c.store.agents),
+            "matches": len(c.store.matches),
+            "claude": c.claude is not None,
+            "spacetime": c.spacetime is not None,
+        }
 
     # Routes are async so state changes and log events stay on the event loop (no threadpool).
 
@@ -129,7 +156,8 @@ def create_app(
     @app.put("/matches/{match_id}/challenge")
     async def put_challenge(match_id: str, body: dict) -> Match:
         """Challenge designer (agents team) can push a round directly instead of being called."""
-        return guarded(coord().set_challenge, match_id, body)
+        guarded(coord().set_challenge, match_id, body)
+        return await coord().start_game(match_id)
 
     @app.post("/matches/{match_id}/state")
     async def set_state(match_id: str, body: StateChange) -> Match:

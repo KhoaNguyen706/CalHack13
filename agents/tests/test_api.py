@@ -143,9 +143,10 @@ def test_invitation_answer_shows_in_the_chat(client):
     login(client)
     login(client, "Jess", "id-jess")
     q = {"question_id": "q1", "agent_id": "x", "question": "join?", "plan": {"window": "Sat 14:00-16:00", "host": "phong", "size": 4}}
-    # Jess borrows Marcus's context, which keeps plans to 90 minutes.
-    assert client.post("/agents/jess/question", json=q).json()["answer"] == "counter"
-    said = "Phong's 4-person challenge, Sat 2:00–4:00pm. I said counter (Sat 14:00-15:30): can do 90 minutes."
+    # Jess borrows Marcus's sample context (90-minute plans), but a real person decides for themselves: their agent
+    # only checks the time fits, and never declines for them.
+    assert client.post("/agents/jess/question", json=q).json()["answer"] == "yes"
+    said = "a 4-person challenge nearby, Sat 2:00–4:00pm. I said yes: fits your free time. It's your call: tap Accept or Not now."
     assert any(said in t for t in lines(client, "jess"))
 
 
@@ -178,13 +179,14 @@ def test_invitations_joins_and_stand_ins(client, coord):
     wait_for(lambda: "kenji" in coord.matches["m1"]["accepted"])  # a stand-in accepts on its own
     tick(client)
     jess = client.get("/users/jess").json()
-    assert jess["needs_accept"] and any("Phong invited you to a 3-person challenge" in t for t in lines(client, "jess"))
-    assert any(t == "Kenji joined (2 of 3)." for t in lines(client, "phong"))
+    assert jess["needs_accept"] and any("You're invited to a 3-person challenge nearby" in t for t in lines(client, "jess"))
+    assert not any("Phong" in t for t in lines(client, "jess"))  # the host stays anonymous until everyone accepts
+    assert any(t == "Someone joined (2 of 3)." for t in lines(client, "phong"))
 
     client.post("/users/jess/accept", json={"accept": True})
     tick(client)
     assert coord.matches["m1"]["state"] == "confirmed"
-    assert any(t == "Jess joined (3 of 3)." for t in lines(client, "phong"))
+    assert any(t == "Someone joined (3 of 3)." for t in lines(client, "phong"))
 
 
 def test_challenge_status_and_photo_checks(client, coord):
@@ -202,7 +204,10 @@ def test_challenge_status_and_photo_checks(client, coord):
     assert status["my_hint"] == challenge["round"]["hints"]["jess"] and "hints" not in status["challenge"]
     assert status["progress"] == {"steps": [{**s, "passed": False, "reason": None} for s in status["progress"]["steps"]], "done": False}
     tick(client)
-    assert any(t.startswith("Everyone's in!") and "Your part" in t for t in lines(client, "jess"))
+    assert any(t.startswith("Everyone's in! You're meeting Phong.") and "Your part" in t for t in lines(client, "jess"))
+    view = client.get("/challenges/m1").json()
+    assert view["members"] == [{"agent_id": "phong", "name": "Phong"}, {"agent_id": "jess", "name": "Jess"}]
+    assert len(view["challenge"]["steps"]) == 3 and "keys" not in view["challenge"] and "hints" not in view["challenge"]
 
     photo = {"agent_id": "jess", "image_url": "https://example.com/photo.jpg"}
     assert client.post("/challenges/m1/check", json={**photo, "step": "s9"}).status_code == 404
@@ -304,3 +309,19 @@ def test_spacetimeauth_sign_in_keeps_only_the_first_name(coord, tmp_path):
         assert client.post("/users/spacetime", json=body).json()["agent_id"] == "minh"  # same person, same agent
         assert client.post("/users/spacetime", json={**body, "code": "other-app"}).status_code == 401
         assert not coord.agents  # signing in shares nothing
+
+
+def test_demo_presenters_sign_in_with_agents_that_know_them(client, coord):
+    people = client.get("/demo/people").json()
+    assert [p["id"] for p in people] == ["khoa", "phong", "miki"] and people[0]["name"] == "Khoa"
+    me = client.post("/users/demo", json={"person": "phong"}).json()
+    assert me["agent_id"] == "phong" and me["name"] == "Phong" and "puzzles" in me["profile"]["interests"]
+    assert "I know you well" in me["transcript"][0]["text"] and not me["consented"]
+    assert client.post("/users/demo", json={"person": "phong"}).json()["agent_id"] == "phong"  # same person, same agent
+    assert client.post("/users/demo", json={"person": "nobody"}).status_code == 404
+    client.post("/chat/phong", json={"message": "hi"})
+    assert client.post("/demo/people/reset").json() == {"reset": ["phong"]}
+    fresh = client.post("/users/demo", json={"person": "phong"}).json()
+    assert len(fresh["transcript"]) == 1 and not fresh["consented"]  # a clean start, same profile
+    login(client)  # an ordinary demo sign-in never gets a presenter's profile
+    assert client.get("/users/phong-2").status_code == 404 or client.get("/users/phong-2").json()["context_id"] != "phong"

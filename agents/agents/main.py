@@ -19,7 +19,7 @@ from .config import Settings
 from .coordinator_client import CoordinatorClient, CoordinatorError
 from .memory import Memory
 from .mirror import Mirror
-from .models import Answer, ChatIn, ChatLine, Consent, Decision, Feedback, Login, PersonalContext, PhotoCheck, PhotoUpload, Question, SpacetimeLogin, Start
+from .models import Answer, ChatIn, ChatLine, Consent, Decision, DemoLogin, Feedback, Login, PersonalContext, PhotoCheck, PhotoUpload, Question, SpacetimeLogin, Start
 from .place import Place, PlaceService
 from .service import AgentsService, Conflict, NotFound
 from .store import Store
@@ -33,6 +33,9 @@ SEEDS = Path(__file__).parent.parent / "seeds" / "personal_contexts.json"
 
 def load_contexts(path: Path = SEEDS) -> list[PersonalContext]:
     return [PersonalContext.model_validate(c) for c in json.loads(path.read_text(encoding="utf-8"))]
+
+
+DEMO_PEOPLE = SEEDS.with_name("demo_people.json")  # the presenters; edit their facts there
 
 
 def create_app(
@@ -60,7 +63,7 @@ def create_app(
             place = PlaceService(s, web, claude_client)
             svc = AgentsService(
                 s, store, memory, CoordinatorClient(coord_http), claude_client, place, load_contexts(),
-                sponsors.load_booths(), sponsors.load_sponsors(),
+                sponsors.load_booths(), sponsors.load_sponsors(), load_contexts(DEMO_PEOPLE),
             )
             app.state.svc = svc
             app.state.web = web
@@ -126,6 +129,25 @@ def create_app(
         """What the sign-in page needs: SpacetimeAuth's address and our client id (public), or none for name-only."""
         client_id = s.spacetimeauth_client_id or None
         return {"spacetimeauth": {"authority": spacetimeauth.ISSUER, "client_id": client_id} if client_id else None}
+
+    @app.get("/demo/people")
+    async def demo_people() -> list[dict]:
+        """The demo presenters for the sign-in page's "Who are you?" buttons."""
+        return svc().demo_people_view()
+
+    @app.post("/demo/people/reset")
+    async def reset_demo_people() -> dict:
+        """Before the real demo: the presenters start fresh (their agents still know them from the profile)."""
+        return {"reset": svc().reset_demo_people()}
+
+    @app.post("/users/demo")
+    async def login_demo(body: DemoLogin) -> dict:
+        """Sign in as a demo presenter: their agent already knows them. Same person, same agent, on any phone."""
+        try:
+            user = svc().login_demo(body.person)
+        except NotFound as e:
+            raise HTTPException(404, str(e))
+        return await svc().status(user)
 
     @app.post("/users/spacetime")
     async def login_spacetime(body: SpacetimeLogin) -> dict:
@@ -208,6 +230,11 @@ def create_app(
     async def check_photo(match_id: str, body: PhotoCheck) -> dict:
         """One photo for one step. Returns passed + a friendly reason, and the whole progress."""
         return await guarded(svc().check_photo(match_id, body))
+
+    @app.get("/challenges/{match_id}")
+    async def challenge(match_id: str) -> dict:
+        """The game page: title, goal, steps and their progress, and who's in the group. Nobody's part or hint."""
+        return await guarded(svc().challenge_view(match_id))
 
     @app.get("/challenges/{match_id}/progress")
     async def progress(match_id: str) -> dict:

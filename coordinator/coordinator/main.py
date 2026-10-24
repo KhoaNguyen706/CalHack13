@@ -17,6 +17,7 @@ from .broker import Broker
 from .coordinator import Conflict, Coordinator, NotFound
 from .events import EventLog
 from .models import Accept, Agent, Ask, CheckIn, Leave, Match, MatchState, NewChallenge, Question, Reply, StateChange
+from .mirror import Mirror
 from .spacetime import Spacetime
 from .store import Store
 
@@ -42,6 +43,15 @@ def make_spacetime(http: httpx.AsyncClient) -> Spacetime | None:
     return Spacetime(http, url, os.environ.get("SPACETIME_DB", "threekey"), token, os.environ.get("SPACETIME_TOKEN_FILE"))
 
 
+def make_mirror() -> Mirror | None:
+    """Copy agents and matches to SpacetimeDB (the same publisher token as the live board) to survive restarts."""
+    token, token_file = os.environ.get("SPACETIME_TOKEN", ""), os.environ.get("SPACETIME_TOKEN_FILE", "")
+    if not (token or token_file):
+        return None
+    url = os.environ.get("SPACETIME_URL", "http://127.0.0.1:3000")
+    return Mirror(url, os.environ.get("SPACETIME_DB", "threekey"), token, token_file)
+
+
 def create_app(
     db_path: str = os.environ.get("COORDINATOR_DB", "coordinator.db"),
     claude: anthropic.AsyncAnthropic | None = None,
@@ -49,12 +59,13 @@ def create_app(
     reply_timeout: float = float(os.environ.get("REPLY_TIMEOUT_S", "20")),
     spacetime: Callable[[httpx.AsyncClient], Spacetime | None] = make_spacetime,
     game_poll_s: float = 1.5,
+    mirror: Callable[[], Mirror | None] = make_mirror,
 ) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         async with httpx.AsyncClient() as http:
             app.state.coord = Coordinator(
-                store=Store(db_path),
+                store=Store(db_path, mirror()),
                 events=EventLog(),
                 broker=Broker(http, timeout=reply_timeout),
                 http=http,

@@ -432,3 +432,53 @@ details summary {
   flex-direction: column;
   gap: 6px;
 }
+
+/* News from the coordinator, posted into the chat by your agent */
+.bubble.update {
+  align-self: center;
+  max-width: 92%;
+  font-size: 0.9rem;
+  color: var(--muted);
+  background: transparent;
+  border: 1px dashed var(--border);
+  text-align: center;
+}
+
+/* Game page: photo steps and the end screen */
+ol.challenge-steps {
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+ol.challenge-steps li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+ol.challenge-steps li.passed {
+  color: var(--ok);
+}
+
+.stars button.star {
+  font-size: 2rem;
+  background: none;
+  border: 0;
+  color: var(--border);
+  cursor: pointer;
+  padding: 4px;
+}
+
+.stars button.star.on {
+  color: #f5b301;
+}
+
+.row.wrap {
+  flex-wrap: wrap;
+}
+
+.not-quite {
+  color: #b26a00;
+}

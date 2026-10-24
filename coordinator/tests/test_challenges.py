@@ -95,7 +95,7 @@ def test_silent_and_counter_invitees_are_skipped_then_cancel(client):
     mid = client.post("/challenges", json={"agent_id": "host", "size": 3}).json()["match_id"]
     [q] = wait_for(lambda: client.get("/agents/late/questions").json())
     assert q["plan"]["host"] == "host" and q["plan"]["size"] == 3 and "roles" not in q["plan"]
-    assert q["question"] == "Host wants a 3-person challenge in Somewhere, Sat 2:00–4:00pm. Want to join?"
+    assert q["question"] == "Someone nearby wants a 3-person challenge in Somewhere, Sat 2:00–4:00pm. Want to join?"
     reply = {"question_id": q["question_id"], "answer": "counter", "free": "Sat 20:00-22:00", "note": "busy then"}
     client.post("/agents/late/reply", json=reply)
 

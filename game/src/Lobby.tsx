@@ -8,7 +8,7 @@ import InstallHint from './InstallHint.tsx';
 const SIZES = [2, 3, 4, 5];
 const KEY = 'threekey-agent';
 
-type Line = { role: 'agent' | 'user'; text: string };
+type Line = { role: 'agent' | 'user' | 'update'; text: string };
 type Match = {
   match_id: string; members: string[]; accepted: string[]; state: string; window: string; area: string;
   host?: string | null; size?: number | null;
@@ -17,6 +17,7 @@ type Shared = { free: string; area: string; interests: string[]; skills: string[
 type Status = {
   agent_id: string; name: string; transcript: Line[]; match: Match | null; is_host: boolean; needs_accept: boolean;
   my_part: string | null; challenge: { title?: string; goal?: string } | null; consented: boolean; would_share: Shared;
+  last_match: string | null;
 };
 
 // Sign in with SpacetimeAuth: OpenID Connect authorization code + PKCE. The page only ever holds a one-time code;
@@ -108,10 +109,18 @@ function Login() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [auth, setAuth] = useState<AuthConfig['spacetimeauth'] | undefined>(undefined); // undefined = still checking
+  const [people, setPeople] = useState<{ id: string; name: string }[]>([]);
 
   useEffect(() => {
     call<AuthConfig>(AGENTS, '/auth/config').then(c => setAuth(c.spacetimeauth)).catch(() => setAuth(null));
+    call<{ id: string; name: string }[]>(AGENTS, '/demo/people').then(setPeople).catch(() => setPeople([]));
   }, []);
+
+  // A demo presenter: their agent already knows them (agents/seeds/demo_people.json).
+  const presenter = (person: string) => {
+    setBusy(true);
+    call<Status>(AGENTS, '/users/demo', { person }).then(enter).catch(e => setError(String(e.message))).finally(() => setBusy(false));
+  };
 
   const demo = (e: React.FormEvent) => {
     e.preventDefault();
@@ -143,6 +152,17 @@ function Login() {
         </section>
       )}
       {auth === undefined && <p className="muted">Loading sign-in…</p>}
+      {people.length > 0 && (
+        <section className="card">
+          <p className="label">Demo · who are you?</p>
+          <div className="row wrap">
+            {people.map(p => (
+              <button key={p.id} className="secondary" disabled={busy} onClick={() => presenter(p.id)}>I'm {p.name}</button>
+            ))}
+          </div>
+          <p className="muted small">Your agent already knows you, like a personal agent you've used for a while.</p>
+        </section>
+      )}
       <details className="card" open={auth === null}>
         <summary className="label">Just trying it out? Use the demo with a first name</summary>
         <form className="stack" onSubmit={demo}>
@@ -215,6 +235,10 @@ function Chat({ agentId }: { agentId: string }) {
 
   const m = status.match;
   const seats = m ? m.size ?? m.members.length : 0;
+  // Others stay anonymous (Person A, B, ...) until everyone has accepted; then the challenge reveals names.
+  const named = !!m && ['confirmed', 'playing', 'done'].includes(m.state);
+  const others = m ? m.members.filter(p => p !== agentId) : [];
+  const who = (p: string) => (p === agentId ? 'You' : named ? title(p) : `Person ${String.fromCharCode(65 + others.indexOf(p))}`);
 
   return (
     <main className="app chat">
@@ -239,12 +263,12 @@ function Chat({ agentId }: { agentId: string }) {
       {m && (
         <section className="card">
           <p className="label">
-            {m.host ? `${m.host === agentId ? 'Your' : `${title(m.host)}'s`} ${seats}-person challenge` : 'Your group'} · {m.window}
+            {m.host === agentId ? 'Your' : 'A'} {seats}-person challenge · {m.window}
           </p>
           <ul className="board">
             {m.members.map(p => (
               <li key={p} className={m.accepted.includes(p) ? 'here' : ''}>
-                <span>{title(p)}{p === agentId ? ' (you)' : ''}</span>
+                <span>{who(p)}{p === m.host ? ' · host' : ''}</span>
                 <span>{m.accepted.includes(p) ? '✓ in' : '…'}</span>
               </li>
             ))}
@@ -296,6 +320,13 @@ function Chat({ agentId }: { agentId: string }) {
             <button className="primary" onClick={() => run(call(AGENTS, `/users/${agentId}/consent`, { share: true }))}>Share</button>
             <button className="secondary" onClick={() => run(call(AGENTS, `/users/${agentId}/consent`, { share: false }))}>Not now</button>
           </div>
+        </section>
+      )}
+
+      {!m && status.last_match && (
+        <section className="card">
+          <p className="label">Your last challenge</p>
+          <a className="pill" href={`?match=${status.last_match}&agent=${agentId}`}>How was it? Rate it and see who'd meet again →</a>
         </section>
       )}
 

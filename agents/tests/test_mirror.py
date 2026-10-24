@@ -20,6 +20,9 @@ class FakeSpacetime:
             row = json.loads(request.content)
             self.rows[row["key"]] = row
             return httpx.Response(200)
+        if request.url.path.endswith("/call/store_delete"):
+            self.rows.pop(json.loads(request.content)["key"], None)
+            return httpx.Response(200)
         assert request.url.path.endswith("/sql") and b"agent_store" in request.content
         schema = {"elements": [{"name": {"some": "kind"}}, {"name": {"some": "body"}}]}
         return httpx.Response(200, json=[{"schema": schema, "rows": [[r["kind"], r["body"]] for r in self.rows.values()]}])
@@ -52,3 +55,14 @@ def test_spacetimedb_down_still_starts():
 
     store = Store(":memory:", Mirror("http://stdb", "threekey", token="tok", transport=httpx.MockTransport(down)))
     assert store.users == {}
+
+
+def test_forgetting_a_person_survives_a_restart():
+    fake = FakeSpacetime()
+    store = Store(":memory:", Mirror("http://stdb", "threekey", token="tok", transport=httpx.MockTransport(fake)))
+    store.save_user(User(agent_id="minh", identity="demo:minh", name="Minh"))
+    store.add_memory("minh", "chat", "loves film cameras")
+    store.delete_user("minh")
+    store.mirror.flush()
+    fresh = Store(":memory:", Mirror("http://stdb", "threekey", token="tok", transport=httpx.MockTransport(fake)))
+    assert "minh" not in fresh.users and fresh.recent_memories("minh") == []

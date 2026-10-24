@@ -290,7 +290,8 @@ class Coordinator:
 
             plan = {"host": match.host, "size": match.size, "area": match.area, "window": match.window, "activity": ACTIVITY}
             when = pretty(parse_free(match.window))
-            question = f"{name(match.host)} wants a {match.size}-person challenge in {match.area}, {when}. Want to join?"
+            # The host stays anonymous until everyone has accepted; plan.host is for the agents, not for people.
+            question = f"Someone nearby wants a {match.size}-person challenge in {match.area}, {when}. Want to join?"
             replies = await self._ask(invitees, question, plan)
             for agent_id, r in replies.items():
                 self._log_reply(agent_id, r, match_id=match_id)

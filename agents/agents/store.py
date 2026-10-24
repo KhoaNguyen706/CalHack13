@@ -16,6 +16,7 @@ from .models import Feedback, User
 class Mirror(Protocol):
     def load(self) -> list[tuple[str, dict]]: ...
     def put(self, kind: str, key: str, row: dict) -> None: ...
+    def delete(self, kind: str, key: str) -> None: ...
 
 
 TABLES = ("users", "memories", "feedback", "photo_checks", "photos")
@@ -70,6 +71,18 @@ class Store:
         self.users[user.agent_id] = user
         self._save("users", user.agent_id, {"id": user.agent_id, "body": user.model_dump_json()})
         return user
+
+    def delete_user(self, agent_id: str) -> None:
+        """Forget a person and their memories (the demo reset)."""
+        self.users.pop(agent_id, None)
+        memories = [r[0] for r in self.db.execute("SELECT id FROM memories WHERE agent_id = ?", (agent_id,))]
+        self.db.execute("DELETE FROM users WHERE id = ?", (agent_id,))
+        self.db.execute("DELETE FROM memories WHERE agent_id = ?", (agent_id,))
+        self.db.commit()
+        if self.mirror:
+            self.mirror.delete("users", agent_id)
+            for memory_id in memories:
+                self.mirror.delete("memories", memory_id)
 
     def user_by_identity(self, identity: str) -> User | None:
         return next((u for u in self.users.values() if u.identity == identity), None)

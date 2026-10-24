@@ -24,6 +24,11 @@ GREETING = (
     "Hi {name}! I'm your agent. I find you a few people nearby for a quick outdoor challenge. "
     "First, check what I'd share about you on the card below. Nothing leaves until you tap Share."
 )
+# A demo presenter: their agent already knows them, so it says so.
+DEMO_GREETING = (
+    "Hi {name}! I'm your agent, and I know you well: {about} "
+    "I'll find you a few people nearby for a quick challenge. First, check what I'd share about you below."
+)
 # Signed in for real (SpacetimeAuth): we know only their first name, so the agent asks the basics itself.
 NEW_PERSON_GREETING = (
     "Hi {name}! I'm your agent. I find you a few people nearby for a quick outdoor challenge. "
@@ -82,6 +87,7 @@ class AgentsService:
         contexts: list[PersonalContext],
         booths: list[Booth] | None = None,
         sponsors: dict[str, SponsorInfo] | None = None,
+        demo_people: list[PersonalContext] | None = None,
     ):
         self.s = settings
         self.store = store
@@ -90,6 +96,8 @@ class AgentsService:
         self.claude = claude
         self.place = place
         self.contexts = {c.id: c for c in contexts}
+        # The demo presenters: their agents know them well, they're never stand-ins or handed to other sign-ins.
+        self.demo_people = {c.id: c for c in demo_people or []}
         self.booths = [
             {
                 "sponsor": b.sponsor,
@@ -124,6 +132,27 @@ class AgentsService:
             return user
         return self._new_user(body.identity, body.name, self._pick_context(body.context_id))
 
+    def demo_people_view(self) -> list[dict]:
+        """For the sign-in page: who the demo presenters are (no profile details)."""
+        return [{"id": c.id, "name": c.name} for c in self.demo_people.values()]
+
+    def login_demo(self, person_id: str) -> User:
+        """A demo presenter: their agent already knows them. The same person always gets the same agent."""
+        context = self.demo_people.get(person_id)
+        if context is None:
+            raise NotFound(f"unknown demo person {person_id}")
+        identity = f"demo:{person_id}"
+        return self.store.user_by_identity(identity) or self._new_user(identity, context.name or name(person_id), context)
+
+    def reset_demo_people(self) -> list[str]:
+        """A clean start for the presenters: their agents forget the chats and test runs (not their profile)."""
+        gone = []
+        for person_id in self.demo_people:
+            if user := self.store.user_by_identity(f"demo:{person_id}"):
+                self.store.delete_user(user.agent_id)
+                gone.append(user.agent_id)
+        return gone
+
     def login_person(self, person: Person) -> User:
         """A real person: no sample context. Their agent asks for interests, skills and free time in the chat."""
         identity = f"spacetimeauth:{person.sub}"
@@ -136,6 +165,8 @@ class AgentsService:
             agent_id, n = f"{base}-{n}", n + 1
         display = display_name.strip()
         greeting = GREETING if context else NEW_PERSON_GREETING
+        if context and context.id in self.demo_people:
+            greeting = DEMO_GREETING.replace("{about}", context.bio)
         user = User(
             agent_id=agent_id,
             identity=identity,
@@ -222,6 +253,7 @@ class AgentsService:
             "is_host": bool(match and match.get("host") == me),
             "needs_accept": bool(match and match["state"] in ("inviting", "pending") and me not in match["accepted"]),
             "my_part": (rnd.get("keys") or {}).get(me),
+            "last_match": user.last_match,
             "my_hint": (rnd.get("hints") or {}).get(me),
             "challenge": public_round(rnd) if rnd else None,
             "progress": self.progress(match["match_id"], rnd) if rnd else None,
@@ -309,8 +341,18 @@ class AgentsService:
         """POST /agents/{id}/question: the coordinator invites this agent's person to a challenge."""
         user, context = self.store.users.get(q.agent_id), self.contexts.get(q.agent_id)
         if user is not None:
-            profile, display = user.profile, user.name
-        elif context is not None:
+            # A real person decides for themselves (Accept / Not now), so their agent never declines for them:
+            # it only checks the time fits, and counters with the part that does.
+            mine = user.profile.model_copy(update={"open_to_invites": True, "max_minutes": None})
+            ans = personal.rule_answer(mine, q)
+            said = f"{ans.answer} ({ans.free})" if ans.answer == "counter" else ans.answer
+            note = ans.note.replace("their", "your")  # the rules' notes are written for the public log
+            text = f"The coordinator asked if you'd join {self.invite_text(q.plan)}. I said {said}: {note}."
+            if ans.answer != "no":
+                text += " It's your call: tap Accept or Not now."
+            self.notify(user.agent_id, None, text)
+            return ans
+        if context is not None:
             free = await self._stand_in_window(context)
             profile, display = context.profile.model_copy(update={"free": free}), name(context.id)
         else:
@@ -319,22 +361,13 @@ class AgentsService:
         memories = await self.memory.recall(q.agent_id, personal.memory_query(q))
         ans = await personal.decide(self.claude, self.s.model, self.s.reply_budget_s, display, profile, memories, q)
         log.info("%s → %s (%s)", q.agent_id, ans.answer, ans.note)
-        if user is not None:
-            said = f"{ans.answer} ({ans.free})" if ans.answer == "counter" else ans.answer
-            self.notify(
-                user.agent_id,
-                None,
-                f"The coordinator asked if you'd join {self.invite_text(q.plan)}. I said {said}{f': {ans.note}' if ans.note else ''}.",
-            )
         return ans
 
     def invite_text(self, plan: dict | None) -> str:
-        """ "Linh's 4-person challenge, Sat 2:00–4:00pm" """
+        """ "a 4-person challenge nearby, Sat 2:00–4:00pm". Nobody is named until everyone has accepted."""
         plan = plan or {}
-        host, size = plan.get("host"), plan.get("size") or len(plan.get("roles") or {}) or None
-        what = f"a {size}-person challenge" if size else "a group challenge"
-        if host:
-            what = f"{self.display(host)}'s {size}-person challenge" if size else f"{self.display(host)}'s challenge"
+        size = plan.get("size") or len(plan.get("roles") or {}) or None
+        what = f"a {size}-person challenge nearby" if size else "a group challenge nearby"
         return f"{what}, {pretty(plan.get('window'))}"
 
     # --- stand-in agents -------------------------------------------------------------
@@ -414,6 +447,18 @@ class AgentsService:
                 if progress["done"]:
                     self.notify(a, f"{match_id}:complete", "Challenge complete! Take a moment, then rate it on the end screen.")
         return {"step": body.step, "passed": verdict.passed, "reason": verdict.reason, **progress}
+
+    async def challenge_view(self, match_id: str) -> dict:
+        """What every player may see: the public round (no one's part or hint), the step progress, the group."""
+        match = await self.coordinator.match(match_id)
+        rnd = (match.get("challenge") or {}).get("round") or {}
+        return {
+            "match_id": match_id,
+            "state": match["state"],
+            "members": [{"agent_id": a, "name": self.display(a)} for a in match["members"]],
+            "challenge": public_round(rnd) if rnd else None,
+            "progress": self.progress(match_id, rnd) if rnd else None,
+        }
 
     def progress(self, match_id: str, rnd: dict) -> dict:
         checks = self.store.checks(match_id)
@@ -531,12 +576,19 @@ class AgentsService:
             elif state in ("confirmed", "playing") and m.get("challenge"):
                 rnd = m["challenge"].get("round") or {}
                 for a in people:
+                    others = " and ".join(self.display(o) for o in members if o != a)
                     part = (rnd.get("keys") or {}).get(a, "")
                     if rnd.get("goal"):
-                        text = f"Everyone's in! {rnd.get('title', 'Your challenge')}: {rnd['goal']} Your part: “{part}”"
+                        text = f"Everyone's in! You're meeting {others}. {rnd.get('title', 'Your challenge')}: {rnd['goal']} Your part: “{part}”"
                     else:
-                        text = f"Everyone's in! Your key: “{part}” Read it out loud to your group."
+                        text = f"Everyone's in! You're meeting {others}. Your key: “{part}” Read it out loud to your group."
                     self.notify(a, f"{mid}:challenge", text)
+            elif state == "done":
+                for a in people:
+                    user = self.store.users[a]
+                    if f"{mid}:done" not in user.notified:
+                        user.last_match = mid
+                        self.notify(a, f"{mid}:done", "You did it! Rate the challenge and say if you'd meet them again on the end screen.")
             elif state == "cancelled":
                 for a in people:
                     self.notify(a, f"{mid}:cancelled", "That challenge was called off. Tap Start to start your own.")
@@ -548,15 +600,11 @@ class AgentsService:
         for a in m["accepted"]:
             if a != host and f"{mid}:joined:{a}" not in self.store.users[host].notified:
                 count = 2 + sum(1 for k in self.store.users[host].notified if k.startswith(f"{mid}:joined:"))
-                self.notify(host, f"{mid}:joined:{a}", f"{self.display(a)} joined ({count} of {size}).")
+                self.notify(host, f"{mid}:joined:{a}", f"Someone joined ({count} of {size}).")
 
     def _invitation(self, m: dict, agent_id: str) -> str:
-        host = m.get("host")
-        if host and host != agent_id:
-            size = m.get("size") or len(m["members"])
-            return f"{self.display(host)} invited you to a {size}-person challenge, {pretty(m['window'])}. Tap Accept to join."
-        others = " and ".join(self.display(o) for o in m["members"] if o != agent_id)
-        return f"Found you a group with {others}, {pretty(m['window'])}. Tap Accept to join."
+        size = m.get("size") or len(m["members"])
+        return f"You're invited to a {size}-person challenge nearby, {pretty(m['window'])}. Tap Accept to join."
 
     async def _stand_in_window(self, context: PersonalContext) -> str:
         """The window the stand-in is checked in with. After a restart, ask the coordinator (shift_to_now moved it)."""

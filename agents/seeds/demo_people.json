@@ -1,0 +1,42 @@
+[
+  {
+    "id": "khoa",
+    "name": "Khoa",
+    "free": "Sat 14:00-16:00",
+    "interests": ["ai", "hackathons", "exploring", "boba"],
+    "skills": ["map", "backend"],
+    "group_pref": "small",
+    "style": "Says yes to anything outdoors with new people; likes to lead the way.",
+    "bio": "Building Krew at Cal Hacks 13. Knows the area well, always finds the shortcut, and loves meeting other builders.",
+    "memories": [
+      "Led a campus scavenger hunt last semester and found the last clue first (5/5).",
+      "Prefers small groups where everyone gets to talk."
+    ]
+  },
+  {
+    "id": "phong",
+    "name": "Phong",
+    "free": "Sat 14:00-16:00",
+    "interests": ["puzzles", "gaming", "ai", "hackathons"],
+    "skills": ["riddles", "frontend"],
+    "group_pref": "small",
+    "style": "Jumps at anything with a puzzle in it.",
+    "bio": "Frontend on team Krew. Solves crosswords on the train and turns everything into a game.",
+    "memories": [
+      "Did an escape room with strangers and loved it (5/5). Says puzzles break the ice fastest."
+    ]
+  },
+  {
+    "id": "miki",
+    "name": "Miki",
+    "free": "Sat 14:00-16:00",
+    "interests": ["photography", "design", "art", "hackathons"],
+    "skills": ["camera", "design"],
+    "group_pref": "small",
+    "style": "Up for it if there's a good photo at the end.",
+    "bio": "Designer on team Krew. Always has a camera, notices colors and light, and makes the group photo look great.",
+    "memories": [
+      "Took the group photo at last year's hackathon meetup; everyone used it as their profile picture."
+    ]
+  }
+]

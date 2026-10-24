@@ -38,6 +38,7 @@ class PersonalContext(BaseModel):
     """
 
     id: str
+    name: str | None = None  # demo presenters (seeds/demo_people.json) have one; samples borrow the signer's
     free: str
     interests: list[str] = []
     skills: list[str] = []
@@ -75,6 +76,7 @@ class User(BaseModel):
     # Nothing reaches the coordinator until they tap Share on the card listing exactly what it gets.
     consented: bool = False
     notified: list[str] = []  # "<match_id>:<event>" already announced
+    last_match: str | None = None  # the last challenge they finished, for the end screen
 
 
 class Question(BaseModel):
@@ -115,6 +117,12 @@ class Start(BaseModel):
         if v < MIN_GROUP_SIZE:
             raise ValueError(f"size must be at least {MIN_GROUP_SIZE}")
         return v
+
+
+class DemoLogin(BaseModel):
+    """POST /users/demo: one of the demo presenters, whose agent already knows them (seeds/demo_people.json)."""
+
+    person: str = Field(min_length=1, max_length=32)
 
 
 class SpacetimeLogin(BaseModel):

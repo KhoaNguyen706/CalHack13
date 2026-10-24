@@ -51,7 +51,10 @@ class Mirror:
             return []
 
     def put(self, kind: str, key: str, row: dict) -> None:
-        self.q.put({"key": f"{kind}/{key}", "kind": kind, "body": json.dumps(row)})
+        self.q.put(("store_put", {"key": f"{kind}/{key}", "kind": kind, "body": json.dumps(row)}))
+
+    def delete(self, kind: str, key: str) -> None:
+        self.q.put(("store_delete", {"key": f"{kind}/{key}"}))
 
     def flush(self, timeout: float = 10) -> None:
         """Wait until every queued write is sent (tests, shutdown)."""
@@ -61,10 +64,10 @@ class Mirror:
 
     def _run(self) -> None:
         while True:
-            args = self.q.get()
+            reducer, args = self.q.get()
             for attempt in range(3):
                 try:
-                    resp = self.http.post(f"{self.base}/call/store_put", json=args, headers=self.headers)
+                    resp = self.http.post(f"{self.base}/call/{reducer}", json=args, headers=self.headers)
                     resp.raise_for_status()
                     break
                 except httpx.HTTPError as e:

@@ -83,6 +83,11 @@ def test_claude_cannot_accept_for_someone_not_taking_plans():
     assert run_decide("tomas", fake_claude(Decision(answer="yes", note="sure")), "Sat 18:30-20:00").answer == "no"
 
 
+def test_claude_cannot_counter_for_someone_not_taking_plans():
+    decision = Decision(answer="counter", free="Sat 18:30-19:30", note="shorter")
+    assert run_decide("tomas", fake_claude(decision), "Sat 18:30-20:00").answer == "no"
+
+
 def test_claude_failure_falls_back_to_rules():
     assert run_decide("linh", fake_claude(error=RuntimeError("down"))).answer == "yes"
 

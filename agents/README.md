@@ -5,9 +5,11 @@ The personal agents behind the coordinator. Every agent speaks the coordinator's
 
 ```bash
 cd agents
-python -m venv .venv && .venv/Scripts/pip install -r requirements.txt   # macOS/Linux: .venv/bin/pip
-.venv/Scripts/python -m uvicorn agents.main:app --port 8100            # http://localhost:8100/docs
-.venv/Scripts/python -m pytest -q
+python -m venv .venv
+source .venv/bin/activate                   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+python -m uvicorn agents.main:app --port 8100   # http://localhost:8100/docs
+python -m pytest -q
 ```
 
 Demo with live agents, instead of the coordinator's auto-yes `/demo/seed`:
@@ -78,7 +80,8 @@ Code then checks the round:
 
 A broken round goes back to Claude once with the problems listed. A second failure, an error or the 40 s budget
 running out gives the hand-written round (`hint` / `location` / `question` in `booths.json`) at the least-used
-booth. Booth use is counted, so groups playing at the same time get different booths.
+booth. Booth use is counted, so groups playing at the same time get different booths: if another group takes
+Claude's booth while it is still writing, that counts as a broken round and Claude picks again.
 
 ### Before the demo
 

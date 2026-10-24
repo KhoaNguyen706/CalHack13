@@ -94,12 +94,12 @@ async def claude_decide(client: anthropic.AsyncAnthropic, persona: Persona, ques
 
 def check(decision: Decision, persona: Persona, question: Question) -> Reply | None:
     """Claude's decision as a Reply, or None if it breaks a rule."""
+    if decision.answer != "no" and not persona.open_to_invites:
+        return None
     if decision.answer == "counter":
         if not valid_counter(persona, plan_window(persona, question), decision.free):
             return None
         return Reply(answer="counter", free=str(parse_free(decision.free)), note=decision.note)
-    if decision.answer == "yes" and not persona.open_to_invites:
-        return None
     return Reply(answer=decision.answer, note=decision.note)
 
 

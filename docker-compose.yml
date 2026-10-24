@@ -25,7 +25,7 @@ services:
       SPACETIME_DB: threekey
       COORDINATOR_DB: /data/coordinator.db
       # Passed through only if set on your machine; without it matching uses the rule score.
-      ANTHROPIC_API_KEY:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       CHALLENGE_DESIGNER_URL:
       # test-mvp branch: pairs, so two browser windows on one laptop can play a whole round. Real design is 3.
       GROUP_SIZE: ${GROUP_SIZE:-2}

@@ -153,7 +153,7 @@ export function PieceIcon({ off = false }: { off?: boolean }) {
 // The group: one seat per person around the walrus, each on its own line to the Coordinator, never to each other.
 export function Seats({ seats, mood = 'happy', tight = false }: { seats: Seat[]; mood?: WalrusMood; tight?: boolean }) {
   const n = seats.length;
-  const rx = tight ? 92 : 118, ry = tight ? 56 : 66;
+  const rx = tight ? 98 : 126, ry = tight ? 74 : 86;
   let other = 0;
   const placed = seats.map((seat, i) => {
     const a = ((90 + (i * 360) / n) * Math.PI) / 180;
@@ -168,14 +168,18 @@ export function Seats({ seats, mood = 'happy', tight = false }: { seats: Seat[];
   });
   const summary = placed.map(p => (p.seat.state === 'you' ? 'You' : `${p.display} ${WORDS[p.seat.state]}`)).join(', ');
   return (
-    <svg viewBox="-170 -104 340 236" className="seats" role="img" aria-label={`Group of ${n} seats around the Coordinator. ${summary}`}>
+    <svg viewBox="-172 -120 344 264" className="seats" role="img" aria-label={`Group of ${n} seats around the Coordinator. ${summary}`}>
       <circle r="50" className="core" />
       <circle r="46" className="core-ring" />
       {placed.map((p, i) => <path key={`l${i}`} d={p.line} className={`link ${p.seat.state}`} />)}
+      <Walrus mood={mood} size={76} x={-38} y={-38} />
       {placed.map((p, i) => (
         <g key={`s${i}`} className={`seat ${p.seat.state}`} style={{ transform: `translate(${p.x}px, ${p.y}px)` }}>
           <g className="pop">
-            <g transform={`rotate(${p.rot})`}><path d={PIECE} transform="scale(0.5)" className="shape" /></g>
+            <g transform={`rotate(${p.rot})`}>
+              <path d={PIECE} transform="scale(0.5)" className="base" />
+              <path d={PIECE} transform="scale(0.5)" className="shape" />
+            </g>
             {p.seat.state === 'open'
               ? <path d="M -6 0 H 6 M 0 -6 V 6" className="plus" />
               : <text y={p.display === 'You' ? 5 : 7} className={p.display === 'You' ? 'you' : ''}>{p.display === 'You' ? 'You' : p.display.charAt(0)}</text>}
@@ -184,7 +188,6 @@ export function Seats({ seats, mood = 'happy', tight = false }: { seats: Seat[];
           <text y={p.y < -20 ? -30 : 38} className="word">{p.label}</text>
         </g>
       ))}
-      <Walrus mood={mood} size={76} x={-38} y={-38} />
     </svg>
   );
 }

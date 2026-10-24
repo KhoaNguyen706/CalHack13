@@ -37,8 +37,10 @@ function backHref() {
   return agent ? `/?agent=${encodeURIComponent(agent)}` : '/';
 }
 
+// "phong-2" (a second Phong) still reads as Phong: the suffix only keeps ids unique.
 function title(id: string) {
-  return id.charAt(0).toUpperCase() + id.slice(1);
+  const base = id.replace(/-\d+$/, '');
+  return base.charAt(0).toUpperCase() + base.slice(1);
 }
 
 // One event in, the next board out. Pulses are the agents this event should animate (out = coordinator → agent).

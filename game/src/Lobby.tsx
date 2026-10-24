@@ -75,8 +75,10 @@ function remember(key: string, value: string | null) {
   }
 }
 
+// "phong-2" (a second Phong) still reads as Phong: the suffix only keeps ids unique.
 function title(id: string) {
-  return id.charAt(0).toUpperCase() + id.slice(1);
+  const base = id.replace(/-\d+$/, '');
+  return base.charAt(0).toUpperCase() + base.slice(1);
 }
 
 const DAYS: Record<string, string> = { Mon: 'Monday', Tue: 'Tuesday', Wed: 'Wednesday', Thu: 'Thursday', Fri: 'Friday', Sat: 'Saturday', Sun: 'Sunday' };
@@ -273,6 +275,16 @@ function Chat({ agentId }: { agentId: string }) {
     end.current?.scrollIntoView({ block: 'end' });
   }, [lines, thinking, tab]);
 
+  // The card under the chat grows and shrinks (an invite, Accept, the keyboard): keep the newest line in view.
+  const chat = !!status && tab === 'chat';
+  useEffect(() => {
+    const box = end.current?.parentElement;
+    if (!chat || !box) return;
+    const pin = new ResizeObserver(() => end.current?.scrollIntoView({ block: 'end' }));
+    pin.observe(box);
+    return () => pin.disconnect();
+  }, [chat]);
+
   const run = (p: Promise<Status | unknown>) => {
     setError('');
     p.then(s => s && typeof s === 'object' && 'transcript' in s && setStatus(s as Status)).catch(e => setError(String(e.message)));
@@ -322,7 +334,7 @@ function Chat({ agentId }: { agentId: string }) {
         <button className="icon-btn" aria-label="Menu" aria-expanded={menu} onClick={() => setMenu(true)}><Icon name="menu" size={22} /></button>
       </header>
 
-      <div className="tabs" role="tablist" aria-label="Views">
+      <div className="tabs" role="tablist" aria-label="Views" data-tab={tab}>
         <button role="tab" aria-selected={tab === 'chat'} onClick={() => setTab('chat')}>Chat</button>
         <button role="tab" aria-selected={tab === 'flow'} onClick={() => setTab('flow')}>Flow</button>
       </div>
@@ -342,7 +354,7 @@ function Chat({ agentId }: { agentId: string }) {
             {status.transcript.map((line, i) => (
               <p key={i} className={`bubble ${line.role}`}>{line.text}</p>
             ))}
-            {thinking && <p className="bubble typing" aria-label="Pebble is typing">•••</p>}
+            {thinking && <p className="bubble typing" aria-label="Pebble is typing"><i /><i /><i /></p>}
             <div ref={end} />
           </section>
 

@@ -21,8 +21,10 @@ type View = {
 };
 type Summary = { waiting_for: string[]; mutual_meet_again: boolean; my_matches: string[]; share_ok: boolean };
 
+// "phong-2" (a second Phong) still reads as Phong: the suffix only keeps ids unique.
 function title(id: string) {
-  return id.charAt(0).toUpperCase() + id.slice(1);
+  const base = id.replace(/-\d+$/, '');
+  return base.charAt(0).toUpperCase() + base.slice(1);
 }
 
 async function post<T>(url: string, body: unknown): Promise<T> {
@@ -244,7 +246,8 @@ export default function App() {
       {myKey ? (
         <section className="card hero">
           <CardHead eyebrow="Your part" />
-          <h2>{myKey.key}</h2>
+          {/* Claude writes parts of any length: a short key stays big, a long one reads like a note. */}
+          <h2 className={myKey.key.length > 120 ? 'long' : myKey.key.length > 60 ? 'mid' : undefined}>{myKey.key}</h2>
           {view?.challenge?.goal && <p className="muted">{view.challenge.goal}</p>}
           <p className="muted small">Tell your group your part. Nobody can finish alone.</p>
           {myHint && (showHint ? <p className="hint">💡 {myHint}</p> : <button className="link" onClick={() => setShowHint(true)}>Need a hint?</button>)}

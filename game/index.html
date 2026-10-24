@@ -4,6 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Krew</title>
+    <script>
+      // The cross-fade between screens is a nicety: one the browser skips (hidden tab, quick double tap) is fine.
+      for (const type of ['pageswap', 'pagereveal'])
+        addEventListener(type, e => {
+          const t = e.viewTransition;
+          if (t) for (const done of [t.ready, t.finished, t.updateCallbackDone]) done.catch(() => {});
+        });
+    </script>
+    <style>
+      /* Opting in here, not in index.css, means both pages agree before first paint, so the cross-fade isn't skipped. */
+      @view-transition { navigation: auto; }
+      html { background: #07070a; }
+      @media (prefers-color-scheme: light) { html { background: #f3f6f5; } }
+    </style>
     <meta name="description" content="Your AI agent finds a small group nearby for a quick challenge you can only win together." />
     <!-- Add to Home Screen: Android reads the manifest, iPhone reads the apple-* tags -->
     <link rel="manifest" href="/manifest.webmanifest" />

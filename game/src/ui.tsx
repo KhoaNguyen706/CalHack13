@@ -244,5 +244,5 @@ export const PRIVACY_RULES = [
   ['You never see anyone else’s words or times', 'You only see the kind of message: yes, no, new time?'],
   ['Only rough info', 'Free time as a window, place as an area. Never an exact location.'],
   ['Nothing happens without your tap', 'Sharing, joining, accepting and the photo are your call. I never accept for you.'],
-  ['Never one-on-one', 'Groups are 3 to 5, so strangers never meet alone.'],
+  ['Small groups, public places', 'Groups are 2 to 5, and challenges happen only in public spots.'],
 ];

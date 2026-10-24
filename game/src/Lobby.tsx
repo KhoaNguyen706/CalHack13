@@ -7,9 +7,9 @@ import { AGENTS, API } from './config.ts';
 import InstallHint from './InstallHint.tsx';
 import { CardHead, Icon, Pebble, PieceIcon, PRIVACY_RULES, Reconnecting, Seats, Walrus, type Seat } from './ui.tsx';
 
-// Groups are 3 to 5, so strangers never meet one-on-one. The host can start early once this many accepted
-// (the coordinator's MIN_GROUP_SIZE has the final say).
-const SIZES = [3, 4, 5];
+// Groups are 2 to 5 (2 for a quick round with one other person). The host can start early once this many accepted;
+// the coordinator's MIN_GROUP_SIZE has the final say on both.
+const SIZES = [2, 3, 4, 5];
 const START_EARLY = 2;
 const KEY = 'threekey-agent';
 
@@ -368,7 +368,7 @@ function Chat({ agentId }: { agentId: string }) {
               )}
               <section className="card">
                 <CardHead eyebrow="New" title="Start a challenge" />
-                <p className="muted">How many people? Groups are 3 to 5.</p>
+                <p className="muted">How many people? Groups are 2 to 5.</p>
                 <div className="sizes" role="group" aria-label="Group size">
                   {SIZES.map(n => (
                     <button key={n} aria-pressed={size === n} onClick={() => setSize(n)}><b>{n}</b><span>people</span></button>
@@ -381,7 +381,7 @@ function Chat({ agentId }: { agentId: string }) {
                 >
                   {size ? `Start a ${size}-person challenge` : 'Pick a size first'}
                 </button>
-                <p className="note center"><Icon name="lock" size={14} /><span>Strangers never meet one-on-one.</span></p>
+                <p className="note center"><Icon name="lock" size={14} /><span>Public spots only. Everyone accepts before anyone meets.</span></p>
               </section>
             </>
           )}

@@ -99,7 +99,7 @@ export default function App() {
   return (
     <Shell>
       <header>
-        <h1>Three-key hunt</h1>
+        <h1>Krew</h1>
         {round.state !== 'done' && minutesLeft !== undefined && <span className="pill">{minutesLeft} min left</span>}
       </header>
 

@@ -1,4 +1,6 @@
-# CalHack13
+# Krew
+
+Cal Hacks 13 project (repo: CalHack13).
 
 AI coordination layer: your agent finds you people to meet; you start a challenge for 3 to 5 people and the
 coordinator invites other people's agents until it's full, then runs a cooperative challenge they can only win

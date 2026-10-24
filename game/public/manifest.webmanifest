@@ -1,6 +1,6 @@
 {
-  "name": "Three-key: meet people nearby",
-  "short_name": "Three-key",
+  "name": "Krew: meet people nearby",
+  "short_name": "Krew",
   "description": "Your AI agent finds a small group nearby for a quick challenge you can only win together.",
   "start_url": "/",
   "scope": "/",

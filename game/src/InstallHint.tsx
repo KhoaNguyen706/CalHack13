@@ -51,7 +51,7 @@ export default function InstallHint() {
 
   return (
     <section className="card install">
-      <p className="label">Put Three-key on your home screen</p>
+      <p className="label">Put Krew on your home screen</p>
       {prompt ? (
         <button
           className="primary"

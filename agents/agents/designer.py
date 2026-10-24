@@ -98,6 +98,13 @@ def problems(designed: DesignedRound, members: list[Member], booths: list[Booth]
     return found
 
 
+def taken(booth_id: str, booths: list[Booth], uses: Counter, seen: Counter) -> list[str]:
+    """A concurrent group took this booth while Claude was thinking, and a less-used one is still free."""
+    if uses[booth_id] > seen[booth_id] and any(uses[b.id] < uses[booth_id] for b in booths):
+        return [f"booth {booth_id} was just given to another group; pick a booth with fewer uses"]
+    return []
+
+
 def to_challenge(members: list[Member], booth_id: str, keys: dict[str, str], timer_min: int, by: str, note: str) -> dict:
     """The game template the coordinator expects, plus who designed it."""
     return {
@@ -161,12 +168,13 @@ async def design(
     """The round for this group. Counts the chosen booth in `uses` so the next group goes elsewhere."""
     members = request.members
     area = request.match.get("area")
-    local = [b for b in booths if b.area == area]
+    local = [b for b in booths if b.area.casefold() == str(area).strip().casefold()]
     if not local:
         log.warning("no booths listed for area %r; using all booths", area)
     booths = local or booths
     challenge = None
     if client is not None:
+        seen = Counter(uses)  # the counts Claude is shown
         content = brief(members, booths, sponsors, uses, list(notes))
         deadline = time.monotonic() + BUDGET_S
         for attempt in range(2):
@@ -177,7 +185,7 @@ async def design(
                 break
             if designed is None:
                 break
-            found = problems(designed, members, booths)
+            found = problems(designed, members, booths) or taken(designed.booth_id, booths, uses, seen)
             if not found:
                 keys = {k.agent_id: k.key.strip() for k in designed.keys}
                 challenge = to_challenge(members, designed.booth_id, keys, designed.timer_min, "claude", designed.note)

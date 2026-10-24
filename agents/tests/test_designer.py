@@ -111,6 +111,37 @@ def test_only_booths_in_the_match_area_are_offered():
     assert "far_booth" not in client.calls[0]["messages"][0]["content"]
 
 
+def test_area_match_ignores_case():
+    elsewhere = BOOTHS[0].model_copy(update={"id": "far_booth", "area": "SJSU"})
+    client = fake_claude(good_round())
+    request = ChallengeRequest(match={"area": "uc berkeley "}, members=MEMBERS)
+    asyncio.run(design(request, [elsewhere, *BOOTHS], SPONSORS, client, Counter()))
+    content = client.calls[0]["messages"][0]["content"]
+    assert "far_booth" not in content and "spacetime_booth" in content
+
+
+def test_booth_taken_by_a_concurrent_group_is_picked_again():
+    uses = Counter()
+
+    async def both():
+        gate = asyncio.Event()
+
+        async def slow(**kwargs):
+            await gate.wait()
+            return SimpleNamespace(stop_reason="end_turn", parsed_output=good_round())
+
+        slow_client = SimpleNamespace(messages=SimpleNamespace(parse=slow))
+        first = asyncio.create_task(design(REQUEST, BOOTHS, SPONSORS, slow_client, uses))
+        await asyncio.sleep(0)
+        second = await design(REQUEST, BOOTHS, SPONSORS, fake_claude(good_round()), uses)
+        gate.set()
+        return await first, second
+
+    first, second = asyncio.run(both())
+    assert second["round"]["answer"] == "spacetime_booth"
+    assert first["round"]["answer"] != "spacetime_booth"
+
+
 def test_api_matches_the_coordinator_contract():
     app = create_app(use_claude=False, transport=httpx.MockTransport(lambda r: httpx.Response(200)))
     with TestClient(app) as client:

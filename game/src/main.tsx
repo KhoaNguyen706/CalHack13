@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App.tsx';
+import Lobby from './Lobby.tsx';
 import { SpacetimeDBProvider } from 'spacetimedb/react';
 import { DbConnection } from './module_bindings/index.ts';
 
@@ -32,10 +33,17 @@ const connectionBuilder = DbConnection.builder()
     }
   });
 
+// No match in the link yet: log in and find a group first. The live board is only needed for the game.
+const inGame = new URLSearchParams(location.search).has('match');
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <SpacetimeDBProvider connectionBuilder={connectionBuilder}>
-      <App />
-    </SpacetimeDBProvider>
+    {inGame ? (
+      <SpacetimeDBProvider connectionBuilder={connectionBuilder}>
+        <App />
+      </SpacetimeDBProvider>
+    ) : (
+      <Lobby />
+    )}
   </StrictMode>
 );

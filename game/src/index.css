@@ -129,7 +129,8 @@ button.primary:disabled {
   cursor: default;
 }
 
-input {
+input,
+select {
   font: inherit;
   padding: 12px;
   border-radius: 10px;
@@ -146,4 +147,34 @@ input {
 
 .error {
   color: var(--error);
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+}
+
+.row button {
+  flex: 1;
+}
+
+button.secondary {
+  font: inherit;
+  font-size: 1.1rem;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+}
+
+a.pill {
+  text-decoration: none;
 }

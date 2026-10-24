@@ -45,6 +45,14 @@ def test_complementary_skills_score_highest():
     assert best.roles == {"p": "riddles", "n": "map", "c": "camera"}
 
 
+
+def test_group_size_2_makes_pairs(monkeypatch):
+    monkeypatch.setattr("coordinator.matching.GROUP_SIZE", 2)
+    best = candidate_groups([agent("p", skills=["riddles"]), agent("n", skills=["map"])])[0]
+    assert best.roles == {"p": "riddles", "n": "map"}
+    roles = [RoleAssignment(agent_id="p", role="riddles"), RoleAssignment(agent_id="n", role="map")]
+    assert validate(ClaudePick(candidate=0, roles=roles, reason="r"), [best]) is not None
+
 def test_tie_breaks_on_longer_overlap():
     base = [agent("a", free="Sat 12:00-18:00"), agent("b", free="Sat 12:00-18:00")]
     short, long_ = agent("s", free="Sat 12:00-13:00"), agent("l", free="Sat 12:00-15:00")

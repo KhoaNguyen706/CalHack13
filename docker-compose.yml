@@ -1,6 +1,6 @@
 # Whole stack on any OS:  docker compose up --build
 #   coordinator  http://localhost:8000/docs   (negotiation log: ws://localhost:8000/ws/log)
-#   game page    http://localhost:5173/?match=<match_id>&agent=<agent_id>
+#   web app      http://localhost:5173  (log in, find a group, then the game page opens)
 #   spacetimedb  http://localhost:3000
 services:
   spacetime:
@@ -27,6 +27,8 @@ services:
       # Passed through only if set on your machine; without it matching uses the rule score.
       ANTHROPIC_API_KEY:
       CHALLENGE_DESIGNER_URL:
+      # test-mvp branch: pairs, so two browser windows on one laptop can play a whole round. Real design is 3.
+      GROUP_SIZE: ${GROUP_SIZE:-2}
     volumes:
       - shared:/shared:ro
       - coordinator-data:/data
@@ -43,6 +45,7 @@ services:
       # For phones on the same Wi-Fi: SPACETIME_PUBLIC_WS=ws://<your-laptop-ip>:3000 docker compose up
       VITE_SPACETIMEDB_HOST: ${SPACETIME_PUBLIC_WS:-ws://localhost:3000}
       VITE_SPACETIMEDB_DB_NAME: threekey
+      VITE_COORDINATOR_URL: ${COORDINATOR_PUBLIC_URL:-http://localhost:8000}
     depends_on:
       spacetime:
         condition: service_healthy

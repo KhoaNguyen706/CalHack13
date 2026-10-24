@@ -23,7 +23,16 @@ docker compose up --build
 | Game page | http://localhost:5173/?match=&lt;match_id&gt;&agent=&lt;agent_id&gt; |
 | SpacetimeDB | http://localhost:3000 |
 
-Try the demo:
+Test the MVP on one laptop with two people (`test-mvp` branch, which matches pairs, `GROUP_SIZE=2`):
+
+1. Open http://localhost:5173 in two windows. Log in as a different person in each, e.g. `anna` (Riddles) and
+   `ben` (Finding the way), with overlapping free time.
+2. In one window, tap **Find my group**. Both windows get the plan question; tap **Yes** in each within 20 s.
+3. Tap **Accept** in both. Each window opens its game page: tap "We're here" in both, then submit a photo URL.
+
+Don't run `/demo/seed` for this: the seeded bots would get paired with you. `GROUP_SIZE=3 docker compose up` brings back trios.
+
+Try the demo with the seeded personas (needs `GROUP_SIZE=3`):
 
 ```bash
 curl -X POST localhost:8000/demo/seed

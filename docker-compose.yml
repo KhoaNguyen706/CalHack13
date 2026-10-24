@@ -1,7 +1,7 @@
 # Whole stack on any OS:  docker compose up --build
 #   coordinator  http://localhost:8000/docs   (negotiation log: ws://localhost:8000/ws/log)
 #   agents       http://localhost:8100/docs   (persona agents)
-#   game page    http://localhost:5173/?match=<match_id>&agent=<agent_id>
+#   web app      http://localhost:5173  (log in, find a group, then the game page opens)
 #   spacetimedb  http://localhost:3000
 services:
   spacetime:
@@ -26,9 +26,11 @@ services:
       SPACETIME_DB: threekey
       COORDINATOR_DB: /data/coordinator.db
       # Passed through only if set on your machine; without it matching uses the rule score.
-      ANTHROPIC_API_KEY:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # The agents service designs each round; if it's down, the coordinator uses its built-in demo round.
       CHALLENGE_DESIGNER_URL: ${CHALLENGE_DESIGNER_URL:-http://agents:8100/challenge}
+      # 3 in the real design; GROUP_SIZE=2 docker compose up lets two browser windows play a whole round.
+      GROUP_SIZE: ${GROUP_SIZE:-3}
     volumes:
       - shared:/shared:ro
       - coordinator-data:/data
@@ -45,7 +47,7 @@ services:
       # Persona callbacks go here; the coordinator reaches it over the Compose network.
       AGENTS_PUBLIC_URL: http://agents:8100
       # Without it, persona agents decide with rules and rounds come from data/booths.json.
-      ANTHROPIC_API_KEY:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     depends_on:
       - coordinator
 
@@ -58,6 +60,7 @@ services:
       # For phones on the same Wi-Fi: SPACETIME_PUBLIC_WS=ws://<your-laptop-ip>:3000 docker compose up
       VITE_SPACETIMEDB_HOST: ${SPACETIME_PUBLIC_WS:-ws://localhost:3000}
       VITE_SPACETIMEDB_DB_NAME: threekey
+      VITE_COORDINATOR_URL: ${COORDINATOR_PUBLIC_URL:-http://localhost:8000}
     depends_on:
       spacetime:
         condition: service_healthy

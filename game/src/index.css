@@ -129,7 +129,8 @@ button.primary:disabled {
   cursor: default;
 }
 
-input {
+input,
+select {
   font: inherit;
   padding: 12px;
   border-radius: 10px;
@@ -146,4 +147,175 @@ input {
 
 .error {
   color: var(--error);
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+}
+
+.row button {
+  flex: 1;
+}
+
+button.secondary {
+  font: inherit;
+  font-size: 1.1rem;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--card);
+  color: var(--text);
+  cursor: pointer;
+}
+
+a.pill {
+  text-decoration: none;
+}
+
+/* Negotiation screen (?view=log) */
+.app.wide {
+  max-width: 1100px;
+}
+
+.split {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 14px;
+}
+
+@media (max-width: 760px) {
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.pill.live {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+
+.net {
+  width: 100%;
+  height: auto;
+}
+
+.net text {
+  text-anchor: middle;
+  font-size: 13px;
+  font-weight: 600;
+  fill: var(--text);
+}
+
+.net text.sub {
+  font-size: 11px;
+  font-weight: 400;
+  fill: var(--muted);
+}
+
+.net .spoke {
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+
+.net .bond {
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-dasharray: 6 5;
+}
+
+.net .bond.confirmed,
+.net .bond.playing,
+.net .bond.done {
+  stroke: var(--ok);
+  stroke-dasharray: none;
+}
+
+.net .hub circle {
+  fill: var(--card);
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.net .node circle {
+  fill: var(--card);
+  stroke: var(--muted);
+  stroke-width: 2;
+  transition: fill 0.3s, stroke 0.3s;
+}
+
+.net .node.asked circle {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.net .node.yes circle,
+.net .node.accepted circle,
+.net .node.grouped circle {
+  stroke: var(--ok);
+  stroke-width: 3;
+}
+
+.net .node.no circle {
+  stroke: var(--error);
+}
+
+.net .node.here circle,
+.net .node.done circle {
+  fill: var(--ok);
+  stroke: var(--ok);
+}
+
+.net .node.here text:not(.name):not(.sub),
+.net .node.done text:not(.name):not(.sub) {
+  fill: var(--accent-text);
+}
+
+.net .pulse {
+  fill: var(--ok);
+}
+
+.net .pulse.out {
+  fill: var(--accent);
+}
+
+.feed {
+  max-height: 560px;
+  overflow-y: auto;
+  gap: 6px;
+}
+
+.event {
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.tag {
+  display: inline-block;
+  min-width: 82px;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.tag.match {
+  color: var(--accent);
+}
+
+.tag.broker,
+.tag.approval {
+  color: var(--ok);
+}
+
+.tag.game,
+.tag.challenge {
+  color: var(--text);
+  font-weight: 600;
 }

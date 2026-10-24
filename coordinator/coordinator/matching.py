@@ -22,6 +22,8 @@ ROLE_TAGS = {
     "camera": {"camera", "photography", "photos", "video", "design"},
 }
 MIN_OVERLAP_MIN = 60
+# 3 in the real design; GROUP_SIZE=2 lets two browser windows rehearse a whole round.
+GROUP_SIZE = int(os.environ.get("GROUP_SIZE", "3"))
 SHORTLIST = 5
 MODEL = os.environ.get("MATCH_MODEL", "claude-opus-5-5")
 RULES = (Path(__file__).parent.parent / "matching_rules.md").read_text(encoding="utf-8")
@@ -56,7 +58,7 @@ def overlap(agents: list[Agent]) -> Window | None:
 
 def best_roles(agents: list[Agent]) -> tuple[dict[str, str], int]:
     fits = [can_play(a) for a in agents]
-    best = max(permutations(ROLES), key=lambda perm: sum(r in f for r, f in zip(perm, fits)))
+    best = max(permutations(ROLES, len(agents)), key=lambda perm: sum(r in f for r, f in zip(perm, fits)))
     return {a.agent_id: r for a, r in zip(agents, best)}, sum(r in f for r, f in zip(best, fits))
 
 
@@ -74,8 +76,8 @@ def score_group(agents: list[Agent]) -> Candidate | None:
 
 
 def candidate_groups(agents: list[Agent]) -> list[Candidate]:
-    """Brute force over all groups of 3 (1,140 at 20 agents). Best first; ties go to the longer overlap."""
-    found = (score_group(list(group)) for group in combinations(agents, 3))
+    """Brute force over all groups of GROUP_SIZE (1,140 groups of 3 at 20 agents). Best first; ties go to the longer overlap."""
+    found = (score_group(list(group)) for group in combinations(agents, GROUP_SIZE))
     return sorted((c for c in found if c), key=lambda c: (c.score, c.overlap_min), reverse=True)
 
 
@@ -96,7 +98,8 @@ def validate(pick: ClaudePick, shortlist: list[Candidate]) -> Candidate | None:
         return None
     chosen = shortlist[pick.candidate]
     roles = {r.agent_id: r.role for r in pick.roles}
-    if len(pick.roles) != 3 or set(roles) != set(chosen.members) or sorted(roles.values()) != sorted(ROLES):
+    n = len(chosen.members)
+    if len(pick.roles) != n or set(roles) != set(chosen.members) or len(set(roles.values())) != n:
         return None
     return Candidate(chosen.members, chosen.window, roles, chosen.covered, chosen.score)
 

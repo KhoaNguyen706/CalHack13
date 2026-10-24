@@ -1,0 +1,2 @@
+# Secrets (ANTHROPIC_API_KEY): share with teammates directly, never commit.
+.env

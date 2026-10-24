@@ -5,11 +5,14 @@ proven by one photo (checked later by vision.py), and every player gets a person
 teammate. `round.keys` carries those parts, one per member, which is what the coordinator validates.
 Code checks Claude's challenge (one part per member, 1-6 steps, only real reference photos); anything wrong →
 a simple built-in color hunt.
+Each player's past ratings (from memory) come along as `past_challenges`, so a "too long" last time makes this
+one shorter; `round.tuned` tells that player, and only them, what changed.
 """
 
 import asyncio
 import json
 import logging
+import re
 
 import anthropic
 from pydantic import BaseModel
@@ -67,6 +70,12 @@ photo there". Only send people to a booth whose `location` is given; never make 
 - `meeting_point`: where they meet first, before step 1, so strangers can find each other in a crowd. One exact, \
 easy-to-find public spot within a 2-minute walk: a named entrance, landmark, statue or a booth whose `location` \
 is given. Never a vague area ("near the lawn"). If `suggested_meeting_point` is given, use it as it is.
+- `past_challenges` on a player: how they rated earlier challenges, in their words. Learn from it: if one ran too \
+long, make this one shorter (a lower `timer_min`, fewer steps); too hard, make it lighter; if they loved a kind of \
+challenge, lean that way. Ratings are private: never mention them or who said what in the title, goal, steps or \
+anyone else's part.
+- `adjustments`: for each player whose feedback you acted on, one short line to that player only, saying what you \
+changed for them, e.g. "Kept it to 10 minutes, since your last one ran long." Leave it empty if you changed nothing.
 - Plain, warm, short sentences. Title: 2-5 words."""
 
 
@@ -81,6 +90,11 @@ class Part(BaseModel):
     hint: str = ""  # a nudge for that player only, shown when they tap "Need a hint?"
 
 
+class Adjustment(BaseModel):
+    agent_id: str
+    note: str  # to that player only: what changed because of their past feedback
+
+
 class Invented(BaseModel):
     title: str
     goal: str  # one sentence for everyone
@@ -90,6 +104,17 @@ class Invented(BaseModel):
     timer_min: int
     reference_photo: str | None = None
     meeting_point: str = ""  # where the group meets first; empty or too long → the default spot
+    adjustments: list[Adjustment] = []
+
+
+# What in a past rating means "make the next one shorter", for the built-in hunt (Claude reads the words itself).
+TOO_LONG = re.compile(r"too long|took forever|dragged|shorter|less time|too many steps", re.I)
+SHORT_TIMER_MIN = 10
+
+
+def comments(past: list[str]) -> str:
+    """Just the players' own words from rating memories ('… They said: "too long". …')."""
+    return " ".join(m.group(1) for text in past for m in re.finditer(r'They said: "(.*?)"', text))
 
 
 def meetup(match_id: str, spot: str) -> dict:
@@ -132,16 +157,26 @@ def template(members: list[str], c: Invented, sources: list[str], meet: dict) ->
             "timer_min": max(5, min(30, c.timer_min)),
             "sources": sources,
             "meet": meet,  # public: every player sees the same spot and sign
+            # Private, like the parts: what changed for a player because of their past ratings.
+            "tuned": {
+                a.agent_id: a.note.strip()
+                for a in c.adjustments
+                if a.agent_id in members and 0 < len(a.note.strip()) <= MAX_SPOT_CHARS
+            },
         },
     }
 
 
 def fallback(players: list[dict], match_id: str = "", spot: str = "") -> dict:
-    """A color hunt that works for any group of 2+: each person finds one thing for the next."""
+    """A color hunt that works for any group of 2+: each person finds one thing for the next.
+    Shorter when someone's past feedback said a challenge ran long."""
     color = COLORS[sum(map(ord, match_id or "x")) % len(COLORS)]
     ids = [p["agent_id"] for p in players]
     names = {p["agent_id"]: p["name"] for p in players}
     pairs = list(zip(ids, ids[1:] + ids[:1]))
+    long_before = [p["agent_id"] for p in players if TOO_LONG.search(comments(p.get("past_challenges", [])))]
+    timer = SHORT_TIMER_MIN if long_before else 15
+    adjustments = [Adjustment(agent_id=a, note=f"Kept it to {timer} minutes, since your last one ran long.") for a in long_before]
     c = Invented(
         title=f"{color.title()} Hunt",
         goal=f"Find {color} things around you, one for each teammate, then take a group photo with them.",
@@ -156,7 +191,8 @@ def fallback(players: list[dict], match_id: str = "", spot: str = "") -> dict:
             )
             for a, b in pairs
         ],
-        timer_min=15,
+        timer_min=timer,
+        adjustments=adjustments,
     )
     return template(ids, c, [], meetup(match_id, spot or DEFAULT_SPOT))
 
@@ -172,7 +208,7 @@ async def design(
     booths: list[dict] | None = None,
     meeting_point: str = "",
 ) -> tuple[dict, str]:
-    """players: [{agent_id, name, interests, skills}]; booths: [{sponsor, what_it_does, location}].
+    """players: [{agent_id, name, interests, skills, past_challenges}]; booths: [{sponsor, what_it_does, location}].
     meeting_point: an organizer's pick (MEETING_POINT); it beats Claude's. Returns (challenge, how)."""
     ids = [p["agent_id"] for p in players]
     default = meeting_point or f"the main entrance of the {place.location}"

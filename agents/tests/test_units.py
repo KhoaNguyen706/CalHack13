@@ -6,7 +6,7 @@ import pytest
 from agents import designer, personal, timeutil
 from agents.designer import Invented, Part, Step
 from agents.models import Answer, PhotoCheck, Profile, Question
-from agents.service import pretty, slug_id
+from agents.service import pretty, public_round, slug_id
 
 
 def test_windows():
@@ -111,3 +111,39 @@ def test_meeting_point_comes_from_the_organizer_then_claude_then_the_entrance(mo
     assert design_with(monkeypatch, "the Apify booth", organizer="the rotunda steps") == "the rotunda steps"
     assert design_with(monkeypatch, "") == "the main entrance of the Palace of Fine Arts"
     assert design_with(monkeypatch, "x" * 200) == "the main entrance of the Palace of Fine Arts"
+
+
+def test_past_feedback_shortens_the_built_in_hunt_and_tells_only_that_player():
+    said_long = 'Played "Coral Hunt" with Linh (2 people) and rated it 2/5. They said: "fun but too long". Wants to meet them again.'
+    loved_it = 'Played "Coral Hunt" with Phong (2 people) and rated it 5/5. They said: "loved it". Wants to meet them again.'
+    players = [
+        {"agent_id": "phong", "name": "Phong", "past_challenges": [said_long]},
+        {"agent_id": "linh", "name": "Linh", "past_challenges": [loved_it]},
+    ]
+    rnd = designer.fallback(players, "m2")["round"]
+    assert rnd["timer_min"] == designer.SHORT_TIMER_MIN
+    assert rnd["tuned"] == {"phong": "Kept it to 10 minutes, since your last one ran long."}
+    assert "tuned" not in public_round(rnd)  # private, like the parts
+
+    # Only the players' own words count: a "long" elsewhere in the memory (a name, a title) doesn't.
+    plain = [{"agent_id": "x", "name": "X", "past_challenges": ['Played "The Long Walk" and rated it 4/5.']}]
+    assert designer.fallback(plain, "m3")["round"]["timer_min"] == 15
+
+
+def test_claude_adjustments_reach_only_known_players(monkeypatch):
+    from agents.place import Place
+
+    members = {"phong": "Find one for Linh.", "linh": "Find one for Phong."}
+    c = invented(members).model_copy(update={"adjustments": [
+        designer.Adjustment(agent_id="phong", note="Kept it short, since your last one ran long."),
+        designer.Adjustment(agent_id="stranger", note="Not in this group."),
+    ]})
+
+    async def parse(*_, **__):
+        return c
+
+    monkeypatch.setattr(designer.llm, "parse", parse)
+    place = Place(event="Cal Hacks 13", location="Palace of Fine Arts", city="San Francisco", hour="2026-10-24T14", facts=[], images=[], scraped=False, fetched_at=0)
+    players = [{"agent_id": a, "name": a.title()} for a in members]
+    challenge, _ = asyncio.run(designer.design(object(), "m", 5, players, place, "Saturday", "m1"))
+    assert challenge["round"]["tuned"] == {"phong": "Kept it short, since your last one ran long."}

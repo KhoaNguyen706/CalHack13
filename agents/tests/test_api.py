@@ -325,3 +325,17 @@ def test_demo_presenters_sign_in_with_agents_that_know_them(client, coord):
     assert len(fresh["transcript"]) == 1 and not fresh["consented"]  # a clean start, same profile
     login(client)  # an ordinary demo sign-in never gets a presenter's profile
     assert client.get("/users/phong-2").status_code == 404 or client.get("/users/phong-2").json()["context_id"] != "phong"
+
+
+def test_a_too_long_rating_makes_the_next_challenge_shorter(client, coord):
+    """The memory demo: rate one challenge "too long", and the next one designed for you is shorter."""
+    login(client)
+    login(client, "Jess", "id-jess")
+    coord.invite("phong", ["jess"], size=2)
+    client.post("/feedback", json={"match_id": "m1", "agent_id": "phong", "rating": 2, "meet_again": True, "comment": "fun but too long"})
+    client.post("/feedback", json={"match_id": "m1", "agent_id": "jess", "rating": 5, "meet_again": True})
+
+    members = [{"agent_id": a, "interests": [], "skills": []} for a in ("phong", "jess")]
+    rnd = client.post("/challenge", json={"match": {"match_id": "m2"}, "members": members}).json()["round"]
+    assert rnd["timer_min"] == 10
+    assert rnd["tuned"] == {"phong": "Kept it to 10 minutes, since your last one ran long."}  # only Phong hears it

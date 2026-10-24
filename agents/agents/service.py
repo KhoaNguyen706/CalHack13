@@ -69,6 +69,10 @@ def slug_id(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:24] or "player"
 
 
+# What the designer asks memory about each player: how their earlier challenges went.
+PAST_CHALLENGES = "how did the last challenge go: too long, too hard, what they enjoyed"
+
+
 def public_round(rnd: dict) -> dict:
     """The challenge as every player may see it: everything except the other players' parts."""
     keys = ("type", "title", "goal", "connection_hook", "steps", "reference_photo", "timer_min", "unlock", "meet")
@@ -413,6 +417,11 @@ class AgentsService:
             {"agent_id": m["agent_id"], "name": self.display(m["agent_id"]), "interests": m.get("interests", []), "skills": m.get("skills", [])}
             for m in body.get("members") or []
         ]
+        # How each player rated earlier challenges (end-screen ratings live in memory), so this one learns from them.
+        for p in players:
+            past = await self.memory.recall(p["agent_id"], PAST_CHALLENGES, k=3, kind="rating")
+            if past:
+                p["past_challenges"] = past
         now = timeutil.now(self.s.tz)
         place = await self.place.get(now)
         match_id = (body.get("match") or {}).get("match_id", "")
@@ -587,6 +596,8 @@ class AgentsService:
                         text = f"Everyone's in! You're meeting {others}.{where} {rnd.get('title', 'Your challenge')}: {rnd['goal']} Your part: “{part}”"
                     else:
                         text = f"Everyone's in! You're meeting {others}.{where} Your key: “{part}” Read it out loud to your group."
+                    if tuned := (rnd.get("tuned") or {}).get(a):  # only this player hears what their feedback changed
+                        text += f" {tuned}"
                     self.notify(a, f"{mid}:challenge", text)
             elif state == "done":
                 for a in people:

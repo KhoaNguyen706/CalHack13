@@ -96,9 +96,10 @@ class Store:
         self._save("memories", memory_id, row)
         return memory_id
 
-    def recent_memories(self, agent_id: str, n: int = 5) -> list[str]:
+    def recent_memories(self, agent_id: str, n: int = 5, kind: str | None = None) -> list[str]:
         rows = self.db.execute(
-            "SELECT text FROM memories WHERE agent_id = ? ORDER BY ts DESC LIMIT ?", (agent_id, n)
+            "SELECT text FROM memories WHERE agent_id = ? AND (? IS NULL OR kind = ?) ORDER BY ts DESC LIMIT ?",
+            (agent_id, kind, kind, n),
         )
         return [r[0] for r in rows]
 

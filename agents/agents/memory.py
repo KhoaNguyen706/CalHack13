@@ -73,18 +73,20 @@ class Memory:
         if self.ready and items:
             self._spawn(self._push_docs([{"id": m, "text": t, "metadata": {"agent_id": a, "kind": k}} for m, a, k, t in items]))
 
-    async def recall(self, agent_id: str, about: str, k: int = 4) -> list[str]:
-        """Memories relevant to `about` (Moss), plus the newest ones (SQLite), without duplicates."""
+    async def recall(self, agent_id: str, about: str, k: int = 4, kind: str | None = None) -> list[str]:
+        """Memories relevant to `about` (Moss), plus the newest ones (SQLite), without duplicates.
+        `kind` keeps only one kind, e.g. "rating" for how past challenges went."""
         found: list[str] = []
         if self.ready and about.strip():
             try:
-                options = QueryOptions(
-                    top_k=k, filter={"$and": [{"field": "agent_id", "condition": {"$eq": agent_id}}]}
-                )
+                conditions = [{"field": "agent_id", "condition": {"$eq": agent_id}}]
+                if kind:
+                    conditions.append({"field": "kind", "condition": {"$eq": kind}})
+                options = QueryOptions(top_k=k, filter={"$and": conditions})
                 found = [d.text for d in (await self.moss.query(self.index, about, options)).docs]
             except Exception as e:
                 log.warning("Moss query failed: %s", e)
-        merged = found + self.store.recent_memories(agent_id, k)
+        merged = found + self.store.recent_memories(agent_id, k, kind)
         return list(dict.fromkeys(merged))[: k + 2]
 
     async def close(self) -> None:

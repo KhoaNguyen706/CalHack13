@@ -1,0 +1,52 @@
+# Whole stack on any OS:  docker compose up --build
+#   coordinator  http://localhost:8000/docs   (negotiation log: ws://localhost:8000/ws/log)
+#   game page    http://localhost:5173/?match=<match_id>&agent=<agent_id>
+#   spacetimedb  http://localhost:3000
+services:
+  spacetime:
+    build:
+      context: .
+      dockerfile: docker/spacetime.Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - shared:/shared
+    healthcheck:
+      test: ["CMD", "test", "-s", "/shared/spacetime_token"]
+      interval: 2s
+      retries: 90
+
+  coordinator:
+    build: ./coordinator
+    ports:
+      - "8000:8000"
+    environment:
+      SPACETIME_URL: http://spacetime:3000
+      SPACETIME_DB: threekey
+      COORDINATOR_DB: /data/coordinator.db
+      # Passed through only if set on your machine; without it matching uses the rule score.
+      ANTHROPIC_API_KEY:
+      CHALLENGE_DESIGNER_URL:
+    volumes:
+      - shared:/shared:ro
+      - coordinator-data:/data
+    depends_on:
+      spacetime:
+        condition: service_healthy
+
+  game:
+    build: ./game
+    ports:
+      - "5173:5173"
+    environment:
+      # The browser connects to this, so it must be reachable from the phone/laptop, not from inside Docker.
+      # For phones on the same Wi-Fi: SPACETIME_PUBLIC_WS=ws://<your-laptop-ip>:3000 docker compose up
+      VITE_SPACETIMEDB_HOST: ${SPACETIME_PUBLIC_WS:-ws://localhost:3000}
+      VITE_SPACETIMEDB_DB_NAME: threekey
+    depends_on:
+      spacetime:
+        condition: service_healthy
+
+volumes:
+  shared:
+  coordinator-data:

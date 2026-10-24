@@ -20,7 +20,8 @@ type Status = {
 };
 
 // Sign in with SpacetimeAuth: OpenID Connect authorization code + PKCE. The page only ever holds a one-time code;
-// the agents service trades it for the ID token and keeps just the first name.
+// the PKCE secret sits in localStorage, so the magic-link email can finish sign-in in a new tab of the same browser;
+// the agents service trades the code for the ID token and keeps just the first name.
 type AuthConfig = { spacetimeauth: { authority: string; client_id: string } | null };
 const PKCE = 'krew-signin';
 const REDIRECT = `${location.origin}/`;
@@ -33,7 +34,7 @@ async function goSignIn(authority: string, clientId: string) {
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
   const state = b64url(crypto.getRandomValues(new Uint8Array(16)));
   const challenge = b64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
-  sessionStorage.setItem(PKCE, JSON.stringify({ verifier, state }));
+  localStorage.setItem(PKCE, JSON.stringify({ verifier, state }));
   const q = new URLSearchParams({
     response_type: 'code', client_id: clientId, redirect_uri: REDIRECT, scope: 'openid profile',
     code_challenge: challenge, code_challenge_method: 'S256', state,
@@ -88,8 +89,8 @@ function enter(s: Status) {
 function FinishSignIn() {
   const [error, setError] = useState('');
   useEffect(() => {
-    const saved = JSON.parse(sessionStorage.getItem(PKCE) ?? 'null') as { verifier: string; state: string } | null;
-    sessionStorage.removeItem(PKCE);
+    const saved = JSON.parse(localStorage.getItem(PKCE) ?? 'null') as { verifier: string; state: string } | null;
+    localStorage.removeItem(PKCE);
     if (!saved || saved.state !== QUERY.get('state')) return setError("That sign-in link didn't come from this page. Try again.");
     call<Status>(AGENTS, '/users/spacetime', { code: QUERY.get('code'), code_verifier: saved.verifier, redirect_uri: REDIRECT })
       .then(enter)

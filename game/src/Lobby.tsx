@@ -8,7 +8,10 @@ const AGENT = new URLSearchParams(location.search).get('agent') ?? '';
 
 type Agent = { agent_id: string; free: string; skills: string[]; area: string; match_id: string | null };
 type Question = { question_id: string; question: string };
-type Match = { match_id: string; members: string[]; roles: Record<string, string>; window: string; area: string; state: string; accepted: string[] };
+type Match = {
+  match_id: string; members: string[]; roles: Record<string, string>; window: string; area: string; state: string;
+  accepted: string[]; host?: string | null; size?: number | null;
+};
 
 async function api<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(API + path, body === undefined ? {} : {
@@ -147,20 +150,25 @@ function Home() {
 
       {match ? (
         <section className="card">
-          <p className="label">Your group · {match.area} · {match.window}</p>
+          <p className="label">
+            {match.host ? `${title(match.host)}'s ${match.size}-person challenge` : 'Your group'} · {match.area} · {match.window}
+          </p>
           <ul className="board">
             {match.members.map(m => (
               <li key={m} className={match.accepted.includes(m) ? 'here' : ''}>
-                <span>{title(m)}{m === AGENT ? ' (you)' : ''} · {match.roles[m]}</span>
+                <span>{title(m)}{m === AGENT ? ' (you)' : ''}{match.roles[m] ? ` · ${match.roles[m]}` : ''}</span>
                 <span>{match.accepted.includes(m) ? '✓ in' : '…'}</span>
               </li>
             ))}
           </ul>
-          {match.state === 'pending' && !match.accepted.includes(AGENT) && (
+          {['inviting', 'pending'].includes(match.state) && !match.accepted.includes(AGENT) && (
             <div className="row">
               <button className="primary" onClick={() => run(api(`/matches/${match.match_id}/accept`, { agent_id: AGENT }))}>Accept</button>
               <button className="secondary" onClick={() => run(api(`/matches/${match.match_id}/accept`, { agent_id: AGENT, accept: false }))}>Decline</button>
             </div>
+          )}
+          {match.state === 'inviting' && match.accepted.includes(AGENT) && (
+            <p className="muted">Inviting people nearby… {match.members.length} of {match.size} so far</p>
           )}
           {match.state === 'pending' && match.accepted.includes(AGENT) && <p className="muted">Waiting for the others to accept…</p>}
           {match.state === 'confirmed' && <p className="muted">Everyone's in. Setting up your round…</p>}

@@ -44,6 +44,13 @@ async def checkin(
 
 
 @mcp.tool
+async def start_challenge(agent_id: str, size: int = 3) -> dict:
+    """Start a group challenge for your person (check in first). `size` is 3-5 people; the coordinator invites
+    other agents until it's full. As the host you count as accepted; follow the invites with `my_match`."""
+    return await _call("POST", "/challenges", {"agent_id": agent_id, "size": size})
+
+
+@mcp.tool
 async def questions(agent_id: str) -> list | dict:
     """Open questions the coordinator is waiting for you to answer (e.g. "does this plan fit?")."""
     return await _call("GET", f"/agents/{agent_id}/questions")
@@ -59,7 +66,7 @@ async def reply(
 
 @mcp.tool
 async def my_match(agent_id: str) -> dict:
-    """Your current group: members, roles, state and, once confirmed, your challenge key."""
+    """Your current group: host, size, members, state and, once confirmed, your part of the challenge."""
     agent = await _call("GET", f"/agents/{agent_id}")
     if "error" in agent or not agent.get("match_id"):
         return agent if "error" in agent else {"match": None}

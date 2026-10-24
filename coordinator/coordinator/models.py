@@ -107,6 +107,7 @@ class Reply(BaseModel):
 
 
 class MatchState(str, Enum):
+    inviting = "inviting"  # host-led: seats still open, the coordinator is inviting
     pending = "pending"
     confirmed = "confirmed"
     playing = "playing"
@@ -119,7 +120,9 @@ class Match(BaseModel):
 
     match_id: str
     members: list[str]
-    roles: dict[str, str]
+    # Fixed riddles / map / camera roles, only from /matching/run. Host-led groups leave it empty:
+    # the challenge designer writes each player's part.
+    roles: dict[str, str] = {}
     area: str
     window: str
     state: MatchState = MatchState.pending
@@ -127,7 +130,19 @@ class Match(BaseModel):
     reason: str = ""
     picked_by: Literal["claude", "rules"] = "rules"
     challenge: dict | None = None
+    # Host-led challenges (POST /challenges). Unset on groups from /matching/run.
+    host: str | None = None
+    size: int | None = None
+    invited: list[str] = []  # everyone ever invited, so nobody is asked twice
+    declined: list[str] = []
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class NewChallenge(BaseModel):
+    """POST /challenges. Groups of 3 to 5: strangers never meet one on one."""
+
+    agent_id: str
+    size: int = Field(3, ge=3, le=5)
 
 
 class Accept(BaseModel):

@@ -9,14 +9,16 @@ import httpx
 
 from .broker import Broker
 from .events import EventLog
-from .matching import Candidate, candidate_groups, overlap, pick
-from .models import Accept, Agent, CheckIn, Match, MatchState, Window
+from .matching import Candidate, candidate_groups, overlap, pick, pick_invitees, rank_invitees
+from .models import Accept, Agent, CheckIn, Match, MatchState, NewChallenge, Reply, Window, parse_free
 from .spacetime import Spacetime, SpacetimeError, option
 from .store import Store
 
 log = logging.getLogger(__name__)
 
 TIMER_MIN = 15
+MIN_GROUP = 3  # a host-led challenge can start early with this many accepted
+ACTIVITY = "creative outdoor challenge"
 # Fallback round when no challenge designer is reachable: the demo's Three-key sponsor hunt.
 DEMO_KEYS = {
     "riddles": "This sponsor's tool helps you scrape the web.",
@@ -50,11 +52,13 @@ def pretty(w: Window) -> str:
 
 
 def default_challenge(match: Match) -> dict:
+    keys = list(DEMO_KEYS.values())
     return {
         "group": match.members,
         "round": {
             "type": "split_riddle",
-            "keys": {m: DEMO_KEYS[match.roles[m]] for m in match.members},
+            # Groups without fixed roles (host-led) get the demo keys in turn.
+            "keys": {m: DEMO_KEYS.get(match.roles.get(m), keys[i % len(keys)]) for i, m in enumerate(match.members)},
             "answer": "apify_booth",
             "unlock": "all_checked_in + photo",
             "timer_min": TIMER_MIN,
@@ -83,6 +87,8 @@ class Coordinator:
         self._match_lock = asyncio.Lock()
         self._seen: dict[str, set[str]] = {}  # per playing match: who checked in, plus "unlocked"
         self._tasks: set[asyncio.Task] = set()
+        self._asking: set[str] = set()  # agents with an open question; nobody else may ask them meanwhile
+        self._inviters: dict[str, asyncio.Task] = {}  # host-led match_id -> its invite loop
 
     # --- gateway ---------------------------------------------------------------
 
@@ -107,7 +113,27 @@ class Coordinator:
         return self.store.agents[agent_id]
 
     def pool(self) -> list[Agent]:
-        return [a for a in self.store.agents.values() if a.match_id is None]
+        """Agents free to be asked: not in a group and not answering another question."""
+        return [a for a in self.store.agents.values() if a.match_id is None and a.agent_id not in self._asking]
+
+    def _spawn(self, coro) -> asyncio.Task:
+        task = asyncio.create_task(coro)
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+        return task
+
+    async def _ask(self, agents: list[Agent], question: str, plan: dict) -> dict[str, Reply]:
+        ids = {a.agent_id for a in agents}
+        self._asking |= ids
+        try:
+            return await self.broker.ask_all(agents, question, plan)
+        finally:
+            self._asking -= ids
+
+    def _log_reply(self, agent_id: str, r: Reply, **data) -> None:
+        extra = f" ({r.free})" if r.answer == "counter" and r.free else ""
+        note = f" — {r.note}" if r.note else ""
+        self.events.emit("broker", f"{name(agent_id)}: {r.answer}{extra}{note}", agent_id=agent_id, answer=r.answer, **data)
 
     # --- matching --------------------------------------------------------------
 
@@ -151,11 +177,10 @@ class Coordinator:
         }
         others = f"{len(members) - 1} other" + ("s" if len(members) > 2 else "")
         question = f"Plan: meet {others} in {plan['area']}, {pretty(group.window)}, for a {plan['activity']}. Does it fit?"
-        replies = await self.broker.ask_all(members, question, plan)
+        replies = await self._ask(members, question, plan)
 
         for agent_id, r in replies.items():
-            extra = f" ({r.free})" if r.answer == "counter" and r.free else ""
-            self.events.emit("broker", f"{name(agent_id)}: {r.answer}{extra}", agent_id=agent_id, answer=r.answer)
+            self._log_reply(agent_id, r)
             if r.answer == "counter" and r.free:
                 agent = self.store.agents[agent_id].model_copy(update={"free": r.free})
                 self.store.save_agent(agent)
@@ -184,6 +209,142 @@ class Coordinator:
         self.events.emit("match", f"group proposed · waiting for {len(match.members)}/{len(match.members)} approvals", match_id=match.match_id)
         return match
 
+    # --- host-led challenges ----------------------------------------------------
+
+    def start_challenge(self, body: NewChallenge) -> Match:
+        """The host's group, seated with the host only. Invitations run in the background."""
+        host = self.store.agents.get(body.agent_id)
+        if host is None:
+            raise Conflict(f"{body.agent_id} must check in before starting a challenge")
+        if host.match_id is not None or host.agent_id in self._asking:
+            raise Conflict(f"{body.agent_id} is already in a group")
+        match = Match(
+            match_id=uuid.uuid4().hex[:8],
+            members=[host.agent_id],
+            accepted=[host.agent_id],
+            area=host.area,
+            window=host.free,
+            state=MatchState.inviting,
+            host=host.agent_id,
+            size=body.size,
+            invited=[host.agent_id],
+        )
+        self.store.save_match(match)
+        self.store.save_agent(host.model_copy(update={"match_id": match.match_id}))
+        self.events.emit(
+            "challenge",
+            f"{name(host.agent_id)} wants a {body.size}-person challenge · {host.area} · {pretty(host.window)}",
+            match_id=match.match_id,
+            host=host.agent_id,
+            size=body.size,
+        )
+        self._keep_inviting(match.match_id)
+        return match
+
+    def _keep_inviting(self, match_id: str) -> None:
+        task = self._inviters.get(match_id)
+        if task is None or task.done():
+            self._inviters[match_id] = self._spawn(self._invite(match_id))
+
+    def _inviting(self, match_id: str) -> Match | None:
+        match = self.store.matches.get(match_id)
+        return match if match and match.state == MatchState.inviting else None
+
+    async def _invite(self, match_id: str) -> None:
+        """Invite the best candidates in parallel until every seat is filled or nobody is left to ask."""
+        while match := self._inviting(match_id):
+            need = match.size - len(match.members)
+            if need <= 0:
+                self._seats_filled(match)
+                return
+            group = [self.store.agents[m] for m in match.members]
+            ranked = rank_invitees(group, [a for a in self.pool() if a.agent_id not in match.invited], match.size)
+            if not ranked:
+                self.events.emit(
+                    "match",
+                    f"{len(match.members)} of {match.size} joined · nobody else nearby is free then",
+                    match_id=match_id,
+                    host=match.host,
+                )
+                return
+            chosen, reason, picked_by = await pick_invitees(ranked, group, need, self.store.agents, self.claude)
+            if not (match := self._inviting(match_id)):
+                return
+            free = {a.agent_id for a in self.pool()}  # anyone grabbed while Claude was choosing stays out
+            invitees = [self.store.agents[c] for c in chosen if c in free]
+            if not invitees:
+                continue
+            ids = [a.agent_id for a in invitees]
+            match = self.store.save_match(match.model_copy(update={"invited": match.invited + ids}))
+            self.events.emit(
+                "match", "inviting " + ", ".join(map(name, ids)), match_id=match_id, host=match.host, invited=ids
+            )
+            self.events.emit("match", f"picked by {picked_by}: {reason}", picked_by=picked_by, reason=reason)
+
+            plan = {"host": match.host, "size": match.size, "area": match.area, "window": match.window, "activity": ACTIVITY}
+            when = pretty(parse_free(match.window))
+            question = f"{name(match.host)} wants a {match.size}-person challenge in {match.area}, {when}. Want to join?"
+            replies = await self._ask(invitees, question, plan)
+            for agent_id, r in replies.items():
+                self._log_reply(agent_id, r, match_id=match_id)
+                self._join(match_id, agent_id, r)
+
+    def _join(self, match_id: str, agent_id: str, r: Reply) -> None:
+        """Seat an invitee who said yes, or countered with a window that still fits the group."""
+        match, agent = self.store.matches.get(match_id), self.store.agents.get(agent_id)
+        if match is None or agent is None:
+            return
+        if r.answer == "counter" and r.free:
+            agent = self.store.save_agent(agent.model_copy(update={"free": r.free}))
+        willing = r.answer == "yes" or (r.answer == "counter" and r.free)
+        window = overlap([*(self.store.agents[m] for m in match.members), agent]) if willing else None
+        if window is None:
+            self.store.save_match(match.model_copy(update={"declined": match.declined + [agent_id]}))
+            return
+        if match.state != MatchState.inviting or len(match.members) >= match.size or agent.match_id is not None:
+            return  # called off, started or filled meanwhile
+        members = match.members + [agent_id]
+        self.store.save_match(match.model_copy(update={"members": members, "window": str(window)}))
+        self.store.save_agent(agent.model_copy(update={"match_id": match_id}))
+        self.events.emit(
+            "match", f"{name(agent_id)} joined · {len(members)} of {match.size}", match_id=match_id, host=match.host, joined=agent_id
+        )
+
+    def _seats_filled(self, match: Match) -> None:
+        if set(match.accepted) == set(match.members):
+            self._confirm(match)
+            return
+        match = self._save_state(match, MatchState.pending)
+        self.events.emit(
+            "match",
+            f"all {match.size} seats filled · waiting for {len(match.accepted)}/{match.size} approvals",
+            match_id=match.match_id,
+            host=match.host,
+        )
+
+    def _host_led(self, match_id: str) -> Match:
+        match = self.match(match_id)
+        if match.host is None:
+            raise Conflict(f"match {match_id} isn't a host-led challenge")
+        if match.state not in (MatchState.inviting, MatchState.pending):
+            raise Conflict(f"match is {match.state.value}")
+        return match
+
+    def start_now(self, match_id: str) -> Match:
+        """Start with whoever accepted, if that's at least 3. The rest are released."""
+        match = self._host_led(match_id)
+        if len(match.accepted) < MIN_GROUP:
+            raise Conflict(f"{len(match.accepted)} accepted; a challenge needs at least {MIN_GROUP}")
+        self._release(match, [m for m in match.members if m not in match.accepted])
+        match = self.store.save_match(match.model_copy(update={"members": list(match.accepted), "size": len(match.accepted)}))
+        return self._confirm(match)
+
+    def cancel(self, match_id: str) -> Match:
+        match = self._save_state(self._host_led(match_id), MatchState.cancelled)
+        self._release(match)
+        self.events.emit("approval", f"challenge called off · {len(match.members)} back in the pool", match_id=match_id)
+        return match
+
     # --- approval and game state -----------------------------------------------
 
     def match(self, match_id: str) -> Match:
@@ -195,8 +356,33 @@ class Coordinator:
         match = self.match(match_id)
         if body.agent_id not in match.members:
             raise Conflict(f"{body.agent_id} is not in match {match_id}")
-        if match.state != MatchState.pending:
+        if match.state not in (MatchState.pending, MatchState.inviting):
             raise Conflict(f"match is {match.state.value}, not pending")
+
+        if not body.accept and match.host and body.agent_id != match.host:
+            # An invitee backs out: free their seat and invite someone else, instead of cancelling everyone.
+            members = [m for m in match.members if m != body.agent_id]
+            match = self.store.save_match(
+                match.model_copy(
+                    update={
+                        "members": members,
+                        "accepted": [m for m in match.accepted if m != body.agent_id],
+                        "declined": match.declined + [body.agent_id],
+                        "window": str(overlap([self.store.agents[m] for m in members]) or match.window),
+                        "state": MatchState.inviting,
+                    }
+                )
+            )
+            self._release(match, [body.agent_id])
+            self.events.emit(
+                "approval",
+                f"{name(body.agent_id)} ✗ · inviting someone else ({len(members)} of {match.size})",
+                match_id=match_id,
+                host=match.host,
+                left=body.agent_id,
+            )
+            self._keep_inviting(match_id)
+            return match
 
         if not body.accept:
             match = self._save_state(match, MatchState.cancelled)
@@ -210,16 +396,20 @@ class Coordinator:
 
         accepted = sorted(set(match.accepted) | {body.agent_id}, key=match.members.index)
         match = self.store.save_match(match.model_copy(update={"accepted": accepted}))
-        ticks = "  ".join(f"{name(m)} {'✓' if m in accepted else '…'}" for m in match.members)
-        if len(accepted) < len(match.members):
-            self.events.emit("approval", f"{ticks}  ({len(accepted)}/{len(match.members)})", match_id=match_id, accepted=accepted)
+        seats = match.size or len(match.members)
+        if len(accepted) < seats:
+            self.events.emit("approval", f"{self._ticks(match)}  ({len(accepted)}/{seats})", match_id=match_id, accepted=accepted)
             return match
+        return self._confirm(match)
 
+    def _ticks(self, match: Match) -> str:
+        return "  ".join(f"{name(m)} {'✓' if m in match.accepted else '…'}" for m in match.members)
+
+    def _confirm(self, match: Match) -> Match:
+        """Everyone seated has accepted: lock the group and get its challenge designed."""
         match = self._save_state(match, MatchState.confirmed)
-        self.events.emit("approval", f"{ticks}  → CONFIRMED", match_id=match_id, accepted=accepted)
-        task = asyncio.create_task(self.design_challenge(match))
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+        self.events.emit("approval", f"{self._ticks(match)}  → CONFIRMED", match_id=match.match_id, accepted=match.accepted)
+        self._spawn(self.design_challenge(match))
         return match
 
     def set_state(self, match_id: str, state: MatchState) -> Match:
@@ -235,8 +425,8 @@ class Coordinator:
     def _save_state(self, match: Match, state: MatchState) -> Match:
         return self.store.save_match(match.model_copy(update={"state": state}))
 
-    def _release(self, match: Match) -> None:
-        for m in match.members:
+    def _release(self, match: Match, who: list[str] | None = None) -> None:
+        for m in match.members if who is None else who:
             agent = self.store.agents.get(m)
             if agent and agent.match_id == match.match_id:
                 self.store.save_agent(agent.model_copy(update={"match_id": None}))
@@ -252,7 +442,7 @@ class Coordinator:
         """Ask the challenge designer (Claude + Apify, agents team) for the round; fall back to the demo round."""
         if self.challenge_url:
             members = [
-                {"agent_id": m, "role": match.roles[m], **self.store.agents[m].model_dump(include={"skills", "interests"})}
+                {"agent_id": m, "role": match.roles.get(m, "player"), **self.store.agents[m].model_dump(include={"skills", "interests"})}
                 for m in match.members
             ]
             try:
@@ -274,9 +464,10 @@ class Coordinator:
         if set(keys) != set(match.members):
             raise ValueError("challenge.round.keys must have exactly one key per member")
         match = self.store.save_match(match.model_copy(update={"challenge": challenge}))
-        timer = challenge["round"].get("timer_min", TIMER_MIN)
+        rnd = challenge["round"]
+        what = f"“{rnd['title']}”" if rnd.get("title") else "secret spot chosen"
         self.events.emit(
-            "challenge", f"secret spot chosen · {len(keys)} keys sent · timer {timer} min", match_id=match_id
+            "challenge", f"{what} · {len(keys)} parts sent · timer {rnd.get('timer_min', TIMER_MIN)} min", match_id=match_id
         )
         return match
 
@@ -293,7 +484,7 @@ class Coordinator:
             "kind": rnd.get("type", "split_riddle"),
             "timerMin": int(rnd.get("timer_min", TIMER_MIN)),
             "answer": str(rnd.get("answer", "")),
-            "seats": [{"agent_id": m, "role": match.roles[m], "key": rnd["keys"][m]} for m in match.members],
+            "seats": [{"agent_id": m, "role": match.roles.get(m, "player"), "key": rnd["keys"][m]} for m in match.members],
         }
         try:
             await self.spacetime.call("start_round", args)

@@ -348,7 +348,7 @@ class AgentsService:
         place = await self.place.get(now)
         match_id = (body.get("match") or {}).get("match_id", "")
         challenge, how = await designer.design(
-            self.claude, self.s.designer_model, self.s.design_budget_s, players, place, now.strftime("%A, %-I:%M %p"),
+            self.claude, self.s.designer_model, self.s.design_budget_s, players, place, f"{now:%A}, {now.hour % 12 or 12}:{now:%M %p}",
             match_id, self.booths,
         )
         challenge["round"]["designed_by"] = how

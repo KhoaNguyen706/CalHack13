@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .broker import Broker
 from .coordinator import Conflict, Coordinator, NotFound
 from .events import EventLog
-from .models import Accept, Agent, Ask, CheckIn, Match, MatchState, Question, Reply, StateChange
+from .models import Accept, Agent, Ask, CheckIn, Match, MatchState, NewChallenge, Question, Reply, StateChange
 from .spacetime import Spacetime
 from .store import Store
 
@@ -135,10 +135,27 @@ def create_app(
             raise HTTPException(404, "no open question to answer")
         return {"ok": True}
 
+    # --- host-led challenges -----------------------------------------------------
+
+    @app.post("/challenges")
+    async def start_challenge(body: NewChallenge) -> Match:
+        """The host picks the size (3-5); the coordinator invites other agents in the background until it's full."""
+        return guarded(coord().start_challenge, body)
+
+    @app.post("/challenges/{match_id}/start")
+    async def start_now(match_id: str) -> Match:
+        """Start with whoever accepted, if that's at least 3. Unfilled seats are dropped."""
+        return guarded(coord().start_now, match_id)
+
+    @app.post("/challenges/{match_id}/cancel")
+    async def cancel(match_id: str) -> Match:
+        return guarded(coord().cancel, match_id)
+
     # --- matching, approval, game ------------------------------------------------
 
     @app.post("/matching/run")
     async def run_matching() -> list[Match]:
+        """Testing only: split the whole pool into groups of GROUP_SIZE with fixed roles. The app uses /challenges."""
         return await coord().run_matching()
 
     @app.get("/matches")

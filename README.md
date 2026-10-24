@@ -1,7 +1,8 @@
 # CalHack13
 
-AI coordination layer: your agent finds you people to meet; the coordinator matches groups of 3 and runs a
-cooperative challenge they can only win together. Design: `Cal Hacks 13 — AI Coordination Layer Final Design.md`.
+AI coordination layer: your agent finds you people to meet; you start a challenge for 3 to 5 people and the
+coordinator invites other people's agents until it's full, then runs a cooperative challenge they can only win
+together. Design: `Cal Hacks 13 — AI Coordination Layer Final Design.md`.
 
 | Folder | What |
 | --- | --- |
@@ -35,7 +36,16 @@ Test the MVP on one laptop with two people: start with `GROUP_SIZE=2 docker comp
 
 Don't seed personas for this: the seeded bots would get paired with you.
 
-Try the demo with the seeded personas (default `GROUP_SIZE=3`):
+Try a host-led challenge with the seeded personas (they answer yes on their own):
+
+```bash
+curl -X POST localhost:8000/demo/seed
+curl -X POST localhost:8000/challenges -H 'Content-Type: application/json' -d '{"agent_id":"linh","size":4}'
+# the log shows the invites; then accept for each invitee:
+# curl -X POST localhost:8000/matches/<id>/accept -H 'Content-Type: application/json' -d '{"agent_id":"marcus"}'
+```
+
+Or split the whole pool into groups with `/matching/run` (testing, default `GROUP_SIZE=3`):
 
 ```bash
 curl -X POST localhost:8100/personas/checkin-all  # live persona agents (or localhost:8000/demo/seed: auto-yes)
@@ -73,7 +83,7 @@ spacetime login show --token         # copy: the coordinator needs it to start r
 | `SPACETIME_DB` | `threekey` |
 | `SPACETIME_TOKEN` | output of `spacetime login show --token` |
 | `COORDINATOR_DB` | `/data/coordinator.db` |
-| `GROUP_SIZE` | `3` for the real demo, `2` to test with two people |
+| `GROUP_SIZE` | `3`, or `2` to test `/matching/run` with two people. Host-led challenges pick their own size. |
 
 Check `https://<railway-domain>/health` shows `"claude": true, "spacetime": true`. Run one instance only:
 open questions live in memory.

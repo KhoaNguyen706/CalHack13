@@ -1,4 +1,9 @@
-"""Hybrid matching: code filters and scores, Claude picks from a shortlist, code validates the pick."""
+"""Hybrid matching: code filters and scores, Claude picks from a shortlist, code validates the pick.
+
+Two flows share it:
+- Host-led challenges (the app): rank_invitees + pick_invitees choose who to invite into the host's group.
+- /matching/run (testing): candidate_groups + pick split the pool into groups with fixed roles.
+"""
 
 import json
 import logging
@@ -26,7 +31,9 @@ MIN_OVERLAP_MIN = 60
 GROUP_SIZE = int(os.environ.get("GROUP_SIZE", "3"))
 SHORTLIST = 5
 MODEL = os.environ.get("MATCH_MODEL", "claude-opus-5-5")
-RULES = (Path(__file__).parent.parent / "matching_rules.md").read_text(encoding="utf-8")
+_HERE = Path(__file__).parent.parent
+INVITE_RULES = (_HERE / "matching_rules.md").read_text(encoding="utf-8")
+GROUP_RULES = (_HERE / "group_rules.md").read_text(encoding="utf-8")
 
 
 @dataclass(frozen=True)
@@ -120,7 +127,7 @@ async def claude_pick(client: anthropic.AsyncAnthropic, shortlist: list[Candidat
     response = await client.messages.parse(
         model=MODEL,
         max_tokens=16000,
-        system=RULES,
+        system=GROUP_RULES,
         messages=[{"role": "user", "content": json.dumps(payload, indent=1)}],
         output_format=ClaudePick,
     )
@@ -148,3 +155,94 @@ async def pick(
                 return valid, choice.reason, "claude"
             fallback_reason = "Claude pick failed validation → highest rule score"
     return shortlist[0], fallback_reason, "rules"
+
+
+# --- host-led challenges -------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Invitee:
+    agent_id: str
+    window: Window  # the group's shared window if they join
+    score: float
+
+
+def rank_invitees(group: list[Agent], pool: list[Agent], size: int) -> list[Invitee]:
+    """Who fits the host's group best. Hard filters: same area, an hour shared with everyone, and nobody who wants
+    a large group in a group of 3. Score: shared interests (something to talk about), skills the group lacks
+    (complementary), then overlap hours."""
+    area = group[0].area.casefold()
+    interests = set().union(*(a.interests for a in group))
+    skills = set().union(*(a.skills for a in group))
+    found = []
+    for a in pool:
+        if a.area.casefold() != area or (size == 3 and a.group_pref == "large"):
+            continue
+        window = overlap([*group, a])
+        if window is None:
+            continue
+        shared, new = len(set(a.interests) & interests), len(set(a.skills) - skills)
+        score = min(shared, 2) * 2 + min(new, 2) * 3 + (window.end - window.start) / 60
+        found.append(Invitee(a.agent_id, window, score))
+    return sorted(found, key=lambda c: (c.score, c.window.end - c.window.start), reverse=True)
+
+
+class InvitePick(BaseModel):
+    invite: list[str]
+    reason: str
+
+
+def validate_invites(choice: InvitePick, shortlist: list[Invitee], n: int) -> list[str] | None:
+    """Claude must name exactly n different people, all from the shortlist."""
+    ids = {c.agent_id for c in shortlist}
+    if len(choice.invite) != n or len(set(choice.invite)) != n or not set(choice.invite) <= ids:
+        return None
+    return choice.invite
+
+
+async def claude_invites(
+    client: anthropic.AsyncAnthropic, group: list[Agent], shortlist: list[Invitee], n: int, agents: dict[str, Agent]
+) -> InvitePick | None:
+    def person(a: Agent) -> dict:
+        return {"agent_id": a.agent_id, "skills": a.skills, "interests": a.interests}
+
+    payload = {
+        "invite_count": n,
+        "group": [person(a) for a in group],
+        "candidates": [
+            {**person(agents[c.agent_id]), "overlap_if_joined": str(c.window), "rule_score": round(c.score, 2)}
+            for c in shortlist
+        ],
+    }
+    response = await client.messages.parse(
+        model=MODEL,
+        max_tokens=16000,
+        system=INVITE_RULES,
+        messages=[{"role": "user", "content": json.dumps(payload, indent=1)}],
+        output_format=InvitePick,
+    )
+    if response.stop_reason == "refusal":
+        return None
+    return response.parsed_output
+
+
+async def pick_invitees(
+    ranked: list[Invitee], group: list[Agent], n: int, agents: dict[str, Agent], client: anthropic.AsyncAnthropic | None
+) -> tuple[list[str], str, Literal["claude", "rules"]]:
+    """Returns (who to invite, reason, picked_by). Never raises: any Claude failure falls back to the top scores."""
+    n = min(n, len(ranked))
+    shortlist = ranked[: max(SHORTLIST, 2 * n)]
+    fallback_reason = "highest rule scores"
+    if client is not None and len(shortlist) > n:  # nothing to choose when everyone left is invited anyway
+        try:
+            choice = await claude_invites(client, group, shortlist, n, agents)
+        except Exception as e:  # API errors, missing credentials, unparseable output: the demo must not break
+            log.warning("Claude invite pick failed: %s", e)
+            choice = None
+            fallback_reason = "Claude unavailable → highest rule scores"
+        if choice is not None:
+            valid = validate_invites(choice, shortlist, n)
+            if valid:
+                return valid, choice.reason, "claude"
+            fallback_reason = "Claude pick failed validation → highest rule scores"
+    return [c.agent_id for c in shortlist[:n]], fallback_reason, "rules"

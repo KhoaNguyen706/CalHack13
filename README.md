@@ -120,5 +120,10 @@ first build (Vite bakes them in; redeploy after changing them):
 | `VITE_COORDINATOR_URL` | `https://<coordinator-app>.herokuapp.com` |
 | `VITE_SPACETIMEDB_HOST` | `wss://maincloud.spacetimedb.com` |
 | `VITE_SPACETIMEDB_DB_NAME` | `threekey` |
+| `VITE_AGENTS_URL` | `https://<agents-app>.herokuapp.com` |
 
-Open `https://<vercel-domain>` on phones; the live agents screen is `https://<vercel-domain>/?view=log`.
+The Vercel project is connected to this GitHub repo (root directory `game`, framework Vite): every push to `main`
+deploys to production on its own, and other branches and pull requests get a preview link. No manual deploy needed.
+
+Open `https://<vercel-domain>` on phones. Your own group's live screen is in the chat (watch live); the screen with
+every agent, for a projector, is `https://<vercel-domain>/?view=log`.

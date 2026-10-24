@@ -66,7 +66,7 @@ then submit a photo URL. The coordinator log ends with `challenge complete!`.
 - Fresh start: `docker compose down -v`.
 - Code changes need a rebuild: `docker compose up --build`.
 
-## Deploy (Maincloud + Railway + Vercel)
+## Deploy (Maincloud + Heroku + Vercel)
 
 **1. SpacetimeDB on Maincloud.** Install the CLI (Windows PowerShell: `iwr https://windows.spacetimedb.com -useb | iex`), then:
 
@@ -76,47 +76,46 @@ cd game && npm run spacetime:publish # publishes "threekey" to maincloud
 spacetime login show --token         # copy: the coordinator needs it to start rounds
 ```
 
-**2. Coordinator on Railway.** New project → Deploy from GitHub repo → root directory `coordinator`
-(it builds the Dockerfile). Add a volume mounted at `/data`, generate a public domain, and set:
+**2. Coordinator on Heroku.** Create an app (e.g. `calhacks-coordinator`). Deploy tab → connect the GitHub repo,
+branch `main`. Settings → Buildpacks: add `https://github.com/lstoll/heroku-buildpack-monorepo`, then `heroku/python`
+(in that order). Resources: one **Basic** dyno (Eco sleeps, and the coordinator keeps open invites in memory: run one
+dyno only). Config Vars:
 
 | Variable | Value |
 | --- | --- |
+| `APP_BASE` | `coordinator` (the monorepo buildpack builds this folder) |
 | `ANTHROPIC_API_KEY` | the team key (never commit it) |
 | `SPACETIME_URL` | `https://maincloud.spacetimedb.com` |
 | `SPACETIME_DB` | `threekey` |
-| `SPACETIME_TOKEN` | output of `spacetime login show --token` |
-| `COORDINATOR_DB` | `/data/coordinator.db` |
-| `GROUP_SIZE` | `3`, or `2` to test `/matching/run` with two people. Host-led challenges pick their own size. |
-| `CHALLENGE_DESIGNER_URL` | `https://<agents-domain>/challenge` (step 2b). Unset → the built-in demo round. |
+| `SPACETIME_TOKEN` | output of `spacetime login show --token` (the identity that published `threekey`) |
+| `CHALLENGE_DESIGNER_URL` | `https://<agents-app>.herokuapp.com/challenge` (step 3). Unset → the built-in demo round. |
+| `GROUP_SIZE` | optional: `3`, or `2` to test `/matching/run` with two people |
 
-Check `https://<railway-domain>/health` shows `"claude": true, "spacetime": true`. Run one instance only:
-open questions live in memory.
+Deploy branch, then check `https://<coordinator-app>.herokuapp.com/health` shows `"claude": true, "spacetime": true`.
 
-**2b. Agents service on Railway.** In the same project: New → GitHub repo → root directory `agents`. Add a volume
-mounted at `/data`, generate a public domain, and set:
+**3. Agents service on Heroku.** A second app (e.g. `calhacks-agents`), same repo, same two buildpacks, one Basic
+dyno. Config Vars:
 
 | Variable | Value |
 | --- | --- |
+| `APP_BASE` | `agents` |
 | `ANTHROPIC_API_KEY` | the team key |
-| `COORDINATOR_URL` | `https://<railway-domain>` (the coordinator) |
-| `AGENTS_PUBLIC_URL` | `https://<agents-domain>` (this service; the coordinator calls agents back here) |
-| `AGENTS_DB` | `/data/agents.db` |
+| `COORDINATOR_URL` | `https://<coordinator-app>.herokuapp.com` |
+| `AGENTS_PUBLIC_URL` | `https://<agents-app>.herokuapp.com` (the coordinator calls agents back here) |
+| `APIFY_TOKEN`, `MOSS_PROJECT_ID`, `MOSS_PROJECT_KEY` | optional |
 
-Then set the coordinator's `CHALLENGE_DESIGNER_URL` to `https://<agents-domain>/challenge`. Seed the demo people with
-`curl -X POST "https://<agents-domain>/contexts/seed?shift_to_now=true"`.
+Seed the demo people: `curl -X POST "https://<agents-app>.herokuapp.com/contexts/seed?shift_to_now=true"`.
 
-**3. Agents on Railway.** Same project → New service from the repo → root directory `agents` (Dockerfile). Add a
-volume at `/data`, generate a public domain, and set `ANTHROPIC_API_KEY`, `APIFY_TOKEN`, `MOSS_PROJECT_ID`,
-`MOSS_PROJECT_KEY`, `COORDINATOR_URL=https://<coordinator-domain>`, `AGENTS_PUBLIC_URL=https://<agents-domain>`,
-`AGENTS_DB=/data/agents.db`, `AGENTS_CACHE=/data/cache`. Then set `CHALLENGE_DESIGNER_URL=https://<agents-domain>/challenge`
-on the coordinator.
+Heroku's disk is wiped when a dyno restarts (at least once a day), so both SQLite files start empty again: seed
+again after a restart. Hosts with volumes (Railway: mount `/data`, set `COORDINATOR_DB=/data/coordinator.db` and
+`AGENTS_DB=/data/agents.db`) keep them; the Dockerfiles work there unchanged.
 
 **4. Web app on Vercel.** New project → import the repo → root directory `game` (Vite is detected). Set before the
 first build (Vite bakes them in; redeploy after changing them):
 
 | Variable | Value |
 | --- | --- |
-| `VITE_COORDINATOR_URL` | `https://<railway-domain>` |
+| `VITE_COORDINATOR_URL` | `https://<coordinator-app>.herokuapp.com` |
 | `VITE_SPACETIMEDB_HOST` | `wss://maincloud.spacetimedb.com` |
 | `VITE_SPACETIMEDB_DB_NAME` | `threekey` |
 

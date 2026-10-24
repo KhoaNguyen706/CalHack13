@@ -1,5 +1,6 @@
 """Frozen interface contract. Every agent (seeded, web chat, MCP) speaks these models."""
 
+import os
 import re
 from datetime import datetime, timezone
 from enum import Enum
@@ -7,6 +8,8 @@ from typing import Literal, NamedTuple
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+# Smallest host-led group. 2 lets two people test a whole round; set MIN_GROUP_SIZE=3 so strangers never meet one on one.
+MIN_GROUP_SIZE = int(os.environ.get("MIN_GROUP_SIZE", "2"))
 DAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 _FREE_RE = re.compile(r"^(Mon|Tue|Wed|Thu|Fri|Sat|Sun) (\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$")
 
@@ -139,10 +142,17 @@ class Match(BaseModel):
 
 
 class NewChallenge(BaseModel):
-    """POST /challenges. Groups of 3 to 5: strangers never meet one on one."""
+    """POST /challenges. Groups of MIN_GROUP_SIZE (default 2) to 5."""
 
     agent_id: str
-    size: int = Field(3, ge=3, le=5)
+    size: int = Field(3, le=5)
+
+    @field_validator("size")
+    @classmethod
+    def _check_size(cls, v: int) -> int:
+        if v < MIN_GROUP_SIZE:
+            raise ValueError(f"size must be at least {MIN_GROUP_SIZE}")
+        return v
 
 
 class Accept(BaseModel):

@@ -62,7 +62,7 @@ def test_host_invites_until_full_then_everyone_accepts(client):
 
 def test_size_and_host_rules(client):
     client.post("/demo/seed")
-    for size in (2, 6):
+    for size in (1, 6):
         assert client.post("/challenges", json={"agent_id": "linh", "size": size}).status_code == 422
     assert client.post("/challenges", json={"agent_id": "nobody", "size": 3}).status_code == 409
     assert client.post("/challenges", json={"agent_id": "linh", "size": 3}).status_code == 200
@@ -109,6 +109,31 @@ def test_silent_and_counter_invitees_are_skipped_then_cancel(client):
     assert client.post(f"/challenges/{mid}/cancel").json()["state"] == "cancelled"
     assert client.get("/agents/host").json()["match_id"] is None
     assert client.post(f"/challenges/{mid}/cancel").status_code == 409
+
+
+def test_someone_who_checks_in_later_is_invited(client):
+    checkin(client, "host")
+    checkin(client, "early")
+    mid = client.post("/challenges", json={"agent_id": "host", "size": 3}).json()["match_id"]
+    [q] = wait_for(lambda: client.get("/agents/early/questions").json())
+    client.post("/agents/early/reply", json={"question_id": q["question_id"], "answer": "yes"})
+    wait_for(lambda: "2 of 3 joined · nobody else nearby is free then" in texts(client))
+
+    checkin(client, "late")  # arrives after the coordinator ran out of people
+    [q] = wait_for(lambda: client.get("/agents/late/questions").json())
+    client.post("/agents/late/reply", json={"question_id": q["question_id"], "answer": "yes"})
+    full = state(client, mid, "pending")
+    assert full["members"] == ["host", "early", "late"]
+
+
+def test_two_people_can_play(client):
+    checkin(client, "host")
+    checkin(client, "friend")
+    mid = client.post("/challenges", json={"agent_id": "host", "size": 2}).json()["match_id"]
+    [q] = wait_for(lambda: client.get("/agents/friend/questions").json())
+    client.post("/agents/friend/reply", json={"question_id": q["question_id"], "answer": "yes"})
+    state(client, mid, "pending")
+    assert client.post(f"/matches/{mid}/accept", json={"agent_id": "friend"}).json()["state"] == "confirmed"
 
 
 def test_start_early_with_three(client):

@@ -169,14 +169,14 @@ class Invitee:
 
 def rank_invitees(group: list[Agent], pool: list[Agent], size: int) -> list[Invitee]:
     """Who fits the host's group best. Hard filters: same area, an hour shared with everyone, and nobody who wants
-    a large group in a group of 3. Score: shared interests (something to talk about), skills the group lacks
+    a large group in a group of 3 or fewer. Score: shared interests (something to talk about), skills the group lacks
     (complementary), then overlap hours."""
     area = group[0].area.casefold()
     interests = set().union(*(a.interests for a in group))
     skills = set().union(*(a.skills for a in group))
     found = []
     for a in pool:
-        if a.area.casefold() != area or (size == 3 and a.group_pref == "large"):
+        if a.area.casefold() != area or (size <= 3 and a.group_pref == "large"):
             continue
         window = overlap([*group, a])
         if window is None:

@@ -73,6 +73,7 @@ services:
       VITE_SPACETIMEDB_DB_NAME: threekey
       VITE_COORDINATOR_URL: ${COORDINATOR_PUBLIC_URL:-}
       COORDINATOR_PROXY: http://coordinator:8000
+      AGENTS_PROXY: http://agents:8100
       SPACETIME_PROXY: http://spacetime:3000
     depends_on:
       spacetime:

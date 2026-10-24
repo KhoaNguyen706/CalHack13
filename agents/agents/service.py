@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 
 GREETING = (
     "Hi {name}! I'm your agent. Want to do a quick outdoor challenge with people nearby? "
-    "Tell me how many people (3 to 5), or tap Start."
+    "Tell me how many people (2 to 5), or tap Start."
 )
 # Sample contexts' free windows are written around a 14:00 demo start; shift_to_now moves that start to now.
 DEMO_START_MIN = 14 * 60

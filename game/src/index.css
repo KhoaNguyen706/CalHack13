@@ -319,3 +319,70 @@ a.pill {
   color: var(--text);
   font-weight: 600;
 }
+
+/* Chat with your agent */
+button.pill,
+button.link {
+  font: inherit;
+  background: none;
+  cursor: pointer;
+}
+
+header .row button.pill {
+  flex: none;
+  font-size: 0.85rem;
+}
+
+button.link {
+  border: 0;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bubble {
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: 16px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.bubble.agent {
+  align-self: flex-start;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+
+.bubble.user {
+  align-self: flex-end;
+  background: var(--accent);
+  color: var(--accent-text);
+  border-bottom-right-radius: 4px;
+}
+
+.board li.open {
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.composer {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  gap: 8px;
+  padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
+  background: var(--bg);
+}
+
+.composer button.primary {
+  padding: 12px 16px;
+  font-size: 1rem;
+}

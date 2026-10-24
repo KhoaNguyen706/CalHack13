@@ -1,5 +1,6 @@
 """Models for the agents service. The coordinator's own contract lives in coordinator/coordinator/models.py."""
 
+import os
 import time
 from typing import Literal
 
@@ -97,11 +98,21 @@ class Login(BaseModel):
     context_id: str | None = None  # a sample personal context to use; omitted = the next free one
 
 
-class Start(BaseModel):
-    """Start a challenge: the person who starts it picks how many people play. At least 3: strangers never meet
-    one on one (a safety point of the pitch)."""
+# Smallest group; keep it equal to the coordinator's MIN_GROUP_SIZE. 3 means strangers never meet one on one.
+MIN_GROUP_SIZE = int(os.environ.get("MIN_GROUP_SIZE", "2"))
 
-    size: int = Field(3, ge=3, le=5)
+
+class Start(BaseModel):
+    """Start a challenge: the person who starts it picks how many people play (MIN_GROUP_SIZE to 5)."""
+
+    size: int = Field(3, le=5)
+
+    @field_validator("size")
+    @classmethod
+    def _check_size(cls, v: int) -> int:
+        if v < MIN_GROUP_SIZE:
+            raise ValueError(f"size must be at least {MIN_GROUP_SIZE}")
+        return v
 
 
 class ChatIn(BaseModel):

@@ -139,12 +139,12 @@ def create_app(
 
     @app.post("/challenges")
     async def start_challenge(body: NewChallenge) -> Match:
-        """The host picks the size (3-5); the coordinator invites other agents in the background until it's full."""
+        """The host picks the size (MIN_GROUP_SIZE-5); the coordinator invites other agents in the background until it's full."""
         return guarded(coord().start_challenge, body)
 
     @app.post("/challenges/{match_id}/start")
     async def start_now(match_id: str) -> Match:
-        """Start with whoever accepted, if that's at least 3. Unfilled seats are dropped."""
+        """Start with whoever accepted, if that's at least MIN_GROUP_SIZE. Unfilled seats are dropped."""
         return guarded(coord().start_now, match_id)
 
     @app.post("/challenges/{match_id}/cancel")

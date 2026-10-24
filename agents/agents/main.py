@@ -118,7 +118,7 @@ def create_app(
 
     @app.post("/users/{agent_id}/start")
     async def start(agent_id: str, body: Start | None = None) -> dict:
-        """The Start button: start a challenge for `size` people (3-5, default 3). The coordinator invites the rest."""
+        """The Start button: start a challenge for `size` people (MIN_GROUP_SIZE-5, default 3). The coordinator invites the rest."""
         user = user_or_404(agent_id)
         async with svc().lock(agent_id):
             await guarded(svc().start(user, (body or Start()).size))

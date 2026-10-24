@@ -12,7 +12,7 @@ from pydantic import ValidationError
 
 from . import llm, timeutil
 from .coordinator_client import CoordinatorError
-from .models import User
+from .models import MIN_GROUP_SIZE, User
 
 if TYPE_CHECKING:
     from .service import AgentsService
@@ -29,7 +29,7 @@ nearby. A coordinator invites other people's agents; an AI invents the challenge
 
 How to help:
 - Keep replies short and warm: 1-3 sentences, it's a phone chat. No markdown.
-- When they want to play, call start_challenge with the group size they want (3 to 5; ask if they haven't said, \
+- When they want to play, call start_challenge with the group size they want (2 to 5; ask if they haven't said, \
 suggest 3). You can't promise who joins; news arrives later as updates.
 - When they've been invited, tell them who invited them and when. Call respond_to_invite only on their clear yes \
 or no.
@@ -60,7 +60,7 @@ TOOLS = [
         "description": "Start a challenge for your person. The coordinator invites people nearby until the group has `size` people.",
         "input_schema": {
             "type": "object",
-            "properties": {"size": {"type": "integer", "minimum": 3, "maximum": 5, "description": "Group size, including your person"}},
+            "properties": {"size": {"type": "integer", "minimum": MIN_GROUP_SIZE, "maximum": 5, "description": "Group size, including your person"}},
             "required": ["size"],
         },
     },
@@ -134,8 +134,8 @@ async def _save_profile(svc: AgentsService, user: User, args: dict) -> str:
 
 async def _start_challenge(svc: AgentsService, user: User, args: dict) -> str:
     size = int(args.get("size") or 3)
-    if not 3 <= size <= 5:
-        raise ValueError("size must be 3 to 5: strangers meet in groups of at least 3")
+    if not MIN_GROUP_SIZE <= size <= 5:
+        raise ValueError(f"size must be {MIN_GROUP_SIZE} to 5")
     free = await svc.start(user, size)
     return f"Started a {size}-person challenge for {free}. The coordinator is inviting people; news arrives as updates."
 

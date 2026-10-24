@@ -10,14 +10,14 @@ import httpx
 from .broker import Broker
 from .events import EventLog
 from .matching import Candidate, candidate_groups, overlap, pick, pick_invitees, rank_invitees
-from .models import Accept, Agent, CheckIn, Match, MatchState, NewChallenge, Reply, Window, parse_free
+from .models import MIN_GROUP_SIZE, Accept, Agent, CheckIn, Match, MatchState, NewChallenge, Reply, Window, parse_free
 from .spacetime import Spacetime, SpacetimeError, option
 from .store import Store
 
 log = logging.getLogger(__name__)
 
 TIMER_MIN = 15
-MIN_GROUP = 3  # a host-led challenge can start early with this many accepted
+MIN_GROUP = MIN_GROUP_SIZE  # a host-led challenge can start early with this many accepted
 ACTIVITY = "creative outdoor challenge"
 # Fallback round when no challenge designer is reachable: the demo's Three-key sponsor hunt.
 DEMO_KEYS = {
@@ -89,6 +89,7 @@ class Coordinator:
         self._tasks: set[asyncio.Task] = set()
         self._asking: set[str] = set()  # agents with an open question; nobody else may ask them meanwhile
         self._inviters: dict[str, asyncio.Task] = {}  # host-led match_id -> its invite loop
+        self._stalled: dict[str, int] = {}  # match_id -> group size when it last ran out of people
 
     # --- gateway ---------------------------------------------------------------
 
@@ -105,6 +106,10 @@ class Coordinator:
             f"{name(agent.agent_id)} checked in · {agent.area} · {pretty(agent.window)}",
             agent_id=agent.agent_id,
         )
+        if agent.match_id is None:  # someone new: challenges with open seats may want them
+            for m in list(self.store.matches.values()):
+                if m.state == MatchState.inviting:
+                    self._keep_inviting(m.match_id)
         return agent
 
     def agent(self, agent_id: str) -> Agent:
@@ -260,12 +265,14 @@ class Coordinator:
             group = [self.store.agents[m] for m in match.members]
             ranked = rank_invitees(group, [a for a in self.pool() if a.agent_id not in match.invited], match.size)
             if not ranked:
-                self.events.emit(
-                    "match",
-                    f"{len(match.members)} of {match.size} joined · nobody else nearby is free then",
-                    match_id=match_id,
-                    host=match.host,
-                )
+                if self._stalled.get(match_id) != len(match.members):  # say it once, not on every check-in
+                    self._stalled[match_id] = len(match.members)
+                    self.events.emit(
+                        "match",
+                        f"{len(match.members)} of {match.size} joined · nobody else nearby is free then",
+                        match_id=match_id,
+                        host=match.host,
+                    )
                 return
             chosen, reason, picked_by = await pick_invitees(ranked, group, need, self.store.agents, self.claude)
             if not (match := self._inviting(match_id)):

@@ -45,7 +45,7 @@ async def checkin(
 
 @mcp.tool
 async def start_challenge(agent_id: str, size: int = 3) -> dict:
-    """Start a group challenge for your person (check in first). `size` is 3-5 people; the coordinator invites
+    """Start a group challenge for your person (check in first). `size` is 2-5 people (the coordinator may require 3); the coordinator invites
     other agents until it's full. As the host you count as accepted; follow the invites with `my_match`."""
     return await _call("POST", "/challenges", {"agent_id": agent_id, "size": size})
 

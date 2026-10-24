@@ -147,7 +147,7 @@ def test_invitation_answer_shows_in_the_chat(client):
 def test_start_asks_the_coordinator_for_that_size(client, coord):
     login(client)
     assert client.post("/users/phong/start", json={"size": 6}).status_code == 422
-    assert client.post("/users/phong/start", json={"size": 2}).status_code == 422  # never fewer than 3
+    assert client.post("/users/phong/start", json={"size": 1}).status_code == 422  # never alone
     status = client.post("/users/phong/start", json={"size": 4}).json()
     assert status["checked_in"] and coord.agents["phong"]["callback_url"] == "http://agents/agents/phong/question"
     wait_for(lambda: ("POST", "/challenges", {"agent_id": "phong", "size": 4}) in coord.calls)

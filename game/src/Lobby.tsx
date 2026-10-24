@@ -245,7 +245,7 @@ function Chat({ agentId }: { agentId: string }) {
       <header>
         <h1>Your agent</h1>
         <span className="row">
-          <a className="pill" href="?view=log" target="_blank">watch live ↗</a>
+          <a className="pill" href={`?view=log&agent=${encodeURIComponent(agentId)}`} target="_blank">watch live ↗</a>
           <button className="pill" onClick={switchPerson}>switch person</button>
         </span>
       </header>

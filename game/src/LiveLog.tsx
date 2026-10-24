@@ -17,6 +17,18 @@ const STATUS_LABEL: Record<Status, string> = {
 };
 const SIZE = 440, MID = SIZE / 2, RING = 160;
 
+// Back to the chat of the person who opened this screen: their agent comes in the link (each window is its own
+// person), else the one this browser remembers (the lobby's key). Without either, back to sign-in.
+function backHref() {
+  let agent = new URLSearchParams(location.search).get('agent');
+  try {
+    agent ??= localStorage.getItem('threekey-agent');
+  } catch {
+    // private mode
+  }
+  return agent ? `/?agent=${encodeURIComponent(agent)}` : '/';
+}
+
 function title(id: string) {
   return id.charAt(0).toUpperCase() + id.slice(1);
 }
@@ -129,7 +141,10 @@ export default function LiveLog() {
     <main className="app wide">
       <header>
         <h1>Agents, live</h1>
-        <span className={`pill ${online ? 'live' : ''}`}>{online ? '● live' : 'reconnecting…'}</span>
+        <span className="row">
+          <a className="pill" href={backHref()}>← back</a>
+          <span className={`pill ${online ? 'live' : ''}`}>{online ? '● live' : 'reconnecting…'}</span>
+        </span>
       </header>
 
       <div className="split">

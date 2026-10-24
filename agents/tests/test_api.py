@@ -195,27 +195,31 @@ def test_challenge_status_and_photo_checks(client, coord):
     match = coord.invite("phong", ["jess"], size=2)
     members = [{"agent_id": "phong", "interests": ["puzzles"]}, {"agent_id": "jess", "interests": ["campus"]}]
     challenge = client.post("/challenge", json={"match": match, "members": members}).json()
-    assert challenge["round"]["designed_by"].startswith("built-in color hunt")
+    rnd = challenge["round"]
+    assert rnd["designed_by"] == "hand-written words (Claude off)" and rnd["title"] == "Spot & Pose"
     match.update(state="confirmed", accepted=["phong", "jess"], challenge=challenge)
 
     status = client.get("/users/jess").json()
-    assert status["my_part"] == challenge["round"]["keys"]["jess"] and "Phong" in status["my_part"]
-    assert "keys" not in status["challenge"] and len(status["challenge"]["steps"]) == 3  # others' parts hidden
-    assert status["my_hint"] == challenge["round"]["hints"]["jess"] and "hints" not in status["challenge"]
-    assert status["progress"] == {"steps": [{**s, "passed": False, "reason": None} for s in status["progress"]["steps"]], "done": False}
+    assert status["my_part"] == rnd["keys"]["jess"] and status["my_part"] != rnd["keys"]["phong"]
+    assert "keys" not in status["challenge"] and status["challenge"]["pieces"] == rnd["pieces"]  # others' words hidden
+    assert status["challenge"]["steps"] == [{"id": "photo", "task": "Group photo at the spot, doing the pose"}]  # no check
+    assert status["progress"] == {"steps": [{**status["challenge"]["steps"][0], "passed": False, "reason": None}], "done": False}
     tick(client)
-    assert any(t.startswith("Everyone's in! You're meeting Phong.") and "Your part" in t for t in lines(client, "jess"))
+    word = f"Your word: “{status['my_part']}”. Your piece of the picture is on the game page."
+    meet = status["challenge"]["meet"]
+    assert meet["spot"] == "the main entrance of the Palace of Fine Arts" and meet["sign"]  # public, like the pieces
+    hello = f"Everyone's in! You're meeting Phong. Meet at {meet['spot']}. Look for phones showing {meet['emoji']} {meet['sign']}"
+    assert any(t.startswith(hello) and "Spot & Pose:" in t and word in t for t in lines(client, "jess"))
     view = client.get("/challenges/m1").json()
     assert view["members"] == [{"agent_id": "phong", "name": "Phong"}, {"agent_id": "jess", "name": "Jess"}]
-    assert len(view["challenge"]["steps"]) == 3 and "keys" not in view["challenge"] and "hints" not in view["challenge"]
+    assert view["challenge"]["pose"] == rnd["pose"] and not {"keys", "answer", "spot"} & set(view["challenge"])
 
     photo = {"agent_id": "jess", "image_url": "https://example.com/photo.jpg"}
     assert client.post("/challenges/m1/check", json={**photo, "step": "s9"}).status_code == 404
-    for step in ("s1", "s2", "s3"):
-        out = client.post("/challenges/m1/check", json={**photo, "step": step}).json()
-        assert out["passed"] and "offline" in out["reason"]  # no Claude: photos count
-    assert out["done"] and client.get("/challenges/m1/progress").json()["done"]
-    assert any(t.startswith("Step 3 of 3 done") for t in lines(client, "phong"))
+    out = client.post("/challenges/m1/check", json={**photo, "step": "photo"}).json()
+    assert out["passed"] and "offline" in out["reason"] and out["done"]  # no Claude: photos count
+    assert client.get("/challenges/m1/progress").json()["done"]
+    assert not any(t.startswith("Step ") for t in lines(client, "phong"))  # one photo: no "Step 1 of 1"
     assert any(t.startswith("Challenge complete!") for t in lines(client, "phong"))
 
     coord.invite("phong", ["jess"], size=2, match_id="m2")

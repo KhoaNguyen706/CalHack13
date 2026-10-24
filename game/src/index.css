@@ -1277,6 +1277,25 @@ details[open].card summary::after {
   border: 1px solid var(--border);
 }
 
+/* Your piece of the meme picture: a tall strip, cropped from the whole image */
+.piece {
+  align-self: center;
+  overflow: hidden;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+}
+
+.piece img {
+  display: block;
+  max-width: none;
+}
+
+.shared {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .stars {
   display: flex;
   gap: 6px;

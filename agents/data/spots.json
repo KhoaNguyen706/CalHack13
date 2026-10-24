@@ -1,0 +1,29 @@
+[
+  {
+    "id": "weeping_ladies",
+    "name": "the Weeping Ladies",
+    "area": "Palace of Fine Arts",
+    "about": "Statues of women on top of the colonnade at the Palace of Fine Arts. They face into the tops of the columns, hiding their faces, as if crying.",
+    "check": "the colonnade of the Palace of Fine Arts: tall stone columns, ideally with the statues on top",
+    "giveaways": ["weeping", "ladies", "colonnade"],
+    "words": ["crying", "columns", "look up", "statues", "hidden faces"]
+  },
+  {
+    "id": "rotunda",
+    "name": "the Rotunda",
+    "area": "Palace of Fine Arts",
+    "about": "The big domed rotunda in the middle of the Palace of Fine Arts, built for the 1915 world's fair to look like a Roman ruin.",
+    "check": "the domed rotunda of the Palace of Fine Arts, or its huge columns and arches",
+    "giveaways": ["rotunda", "dome"],
+    "words": ["arches", "1915", "middle", "Roman ruin", "world's fair"]
+  },
+  {
+    "id": "lagoon",
+    "name": "the lagoon",
+    "area": "Palace of Fine Arts",
+    "about": "The pond in front of the rotunda at the Palace of Fine Arts. It was once a mudhole; now ducks swim in it and the dome reflects in the water.",
+    "check": "the lagoon at the Palace of Fine Arts, with the water clearly visible",
+    "giveaways": ["lagoon", "pond"],
+    "words": ["water", "reflection", "ducks", "once mud", "shore"]
+  }
+]

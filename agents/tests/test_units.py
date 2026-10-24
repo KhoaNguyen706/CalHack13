@@ -4,7 +4,7 @@ from datetime import datetime
 import pytest
 
 from agents import designer, personal, timeutil
-from agents.designer import Invented, Part, Step
+from agents.designer import Word, Words
 from agents.models import Answer, PhotoCheck, Profile, Question
 from agents.service import pretty, public_round, slug_id
 
@@ -38,35 +38,52 @@ def test_rule_answer_and_checks():
     assert "groups of 4" in personal.memory_query(ask(host="phong", size=4))
 
 
-def invented(parts, steps=1, photo=None):
-    return Invented(
-        title="Coral Hunt", goal="Find coral things.", connection_hook="Each finds one for a teammate.",
-        steps=[Step(task=f"task {i}", check=f"check {i}") for i in range(steps)],
-        parts=[Part(agent_id=a, part=p) for a, p in parts.items()], timer_min=15, reference_photo=photo,
-    )
+SPOTS, POSES = designer.load_spots(), designer.load_poses()
 
 
 def test_designer_validation():
-    members = ["linh", "marcus", "priya", "kenji"]
-    parts = {m: f"Find one for the next person, {m}." for m in members}
-    assert designer.validate(invented(parts), members, set()) is None
-    assert designer.validate(invented({**parts, "kenji": ""}), members, set()) == "every part must be 1-280 characters"
-    assert designer.validate(invented({"linh": "x"}), members, set()) == "parts must have exactly one entry per member"
-    assert designer.validate(invented(parts, steps=0), members, set()) == "1-6 steps, each with a task and a check"
-    made_up = invented(parts, photo="https://example.com/made-up.jpg")
-    assert designer.validate(made_up, members, set()) == "reference photo isn't one of the scraped photos"
-    assert designer.validate(made_up, members, {"https://example.com/made-up.jpg"}) is None
+    members = ["linh", "marcus", "priya"]
+    spots = {s.id: s for s in SPOTS}
+    words = {"linh": "arches", "marcus": "1915", "priya": "middle"}
+
+    def check(words, spot="rotunda"):
+        return designer.validate(Words(words=[Word(agent_id=a, word=w) for a, w in words.items()]), members, spots[spot])
+
+    assert check(words) is None
+    assert check({"linh": "arches"}) == "words must have exactly one entry per member"
+    assert check({**words, "priya": "a long clue"}) == "every word must be 1-2 words and at most 24 characters"
+    assert check({**words, "priya": "Arches"}) == "words must all be different"
+    assert check({**words, "priya": "rotunda steps"}) == "a word gives the spot away"
+    assert check({**words, "priya": "big dome"}) == "a word gives the spot away"
+    assert check({**words, "priya": "pond"}, spot="lagoon") == "a word gives the spot away"
+    assert designer.fitting(POSES, 3) == [p for p in POSES if p.people == 3]
+    assert [p.people for p in designer.fitting(POSES, 6)] == [5]  # no 6-person meme: the closest
 
 
-def test_fallback_color_hunt_fits_any_group():
-    players = [{"agent_id": a, "name": n} for a, n in (("phong", "Phong"), ("linh", "Linh"))]
-    c = designer.fallback(players, "m1")
-    rnd = c["round"]
-    assert c["group"] == ["phong", "linh"] and rnd["type"] == "photo_challenge"
-    assert set(rnd["keys"]) == {"phong", "linh"} and "Linh" in rnd["keys"]["phong"]
-    assert [s["id"] for s in rnd["steps"]] == ["s1", "s2", "s3"]  # one find each, then a group photo
-    assert all(s["check"] for s in rnd["steps"])
-    assert set(rnd["hints"]) == {"phong", "linh"} and "Linh" in rnd["hints"]["phong"]  # one private nudge each
+def test_hand_picked_spots_and_poses_are_usable():
+    assert {p.people for p in POSES} >= {2, 3, 4, 5}
+    for p in POSES:
+        assert len(p.cuts) == p.people + 1 and p.cuts[0] == 0 and p.cuts[-1] == 1 and p.cuts == sorted(p.cuts)
+        assert p.image.startswith("https://") and 0 <= p.top < 1
+    for s in SPOTS:
+        assert len({w.casefold() for w in s.words}) >= 5
+        assert not any(g in w.casefold() for w in s.words for g in designer.giveaways(s))
+
+
+def test_fallback_fits_any_group():
+    for n in (2, 3, 4, 5):
+        players = [{"agent_id": f"p{i}", "name": f"P{i}"} for i in range(n)]
+        c = designer.fallback(players, SPOTS, POSES, "m1")
+        rnd = c["round"]
+        assert c["group"] == [p["agent_id"] for p in players] and rnd["type"] == "spot_and_pose"
+        assert set(rnd["keys"]) == set(c["group"]) and len(set(rnd["keys"].values())) == n  # a different word each
+        assert sorted(rnd["pieces"].values()) == list(range(n)) and len(rnd["pose"]["cuts"]) == n + 1  # a piece each
+        assert rnd["reference_photo"] == rnd["pose"]["image"] and [s["id"] for s in rnd["steps"]] == ["photo"]
+        spot = next(s for s in SPOTS if s.id == rnd["spot"])
+        assert rnd["answer"].startswith(spot.name) and spot.name in rnd["steps"][0]["check"]
+    assert designer.fallback(players, SPOTS, POSES, "m1") == c  # the same match always gets the same round
+    six = [{"agent_id": f"p{i}", "name": f"P{i}"} for i in range(6)]  # no 6-person meme: equal pieces of the closest
+    assert designer.fallback(six, SPOTS, POSES, "m1")["round"]["pose"]["cuts"] == [0, 0.1667, 0.3333, 0.5, 0.6667, 0.8333, 1]
 
 
 def test_photo_check_needs_one_image():
@@ -86,64 +103,72 @@ def test_meetup_sign_is_the_same_for_the_whole_group():
 
 def test_fallback_meets_at_the_default_spot():
     players = [{"agent_id": a, "name": a.title()} for a in ("phong", "linh")]
-    assert designer.fallback(players, "m1")["round"]["meet"]["spot"] == designer.DEFAULT_SPOT
-    assert designer.fallback(players, "m1", "the fountain")["round"]["meet"]["spot"] == "the fountain"
+    assert designer.fallback(players, SPOTS, POSES, "m1")["round"]["meet"]["spot"] == designer.DEFAULT_SPOT
+    assert designer.fallback(players, SPOTS, POSES, "m1", "the fountain")["round"]["meet"]["spot"] == "the fountain"
+    for i in range(20):  # never sends a group to the spot it meets at
+        assert designer.fallback(players, SPOTS, POSES, f"m{i}", "the lagoon")["round"]["spot"] != "lagoon"
 
 
-def design_with(monkeypatch, spot_from_claude: str, organizer: str = ""):
+def design_with(monkeypatch, spot_from_claude: str, organizer: str = "", spots=None):
     from agents.place import Place
 
-    members = {"phong": "Find one for Linh.", "linh": "Find one for Phong."}
-    c = invented(members).model_copy(update={"meeting_point": spot_from_claude})
+    out = Words(words=[Word(agent_id="phong", word="look up"), Word(agent_id="linh", word="stone")], meeting_point=spot_from_claude)
 
     async def parse(*_, **__):
-        return c
+        return out
 
     monkeypatch.setattr(designer.llm, "parse", parse)
     place = Place(event="Cal Hacks 13", location="Palace of Fine Arts", city="San Francisco", hour="2026-10-24T14", facts=[], images=[], scraped=False, fetched_at=0)
-    players = [{"agent_id": a, "name": a.title()} for a in members]
-    challenge, _ = asyncio.run(designer.design(object(), "m", 5, players, place, "Saturday", "m1", [], organizer))
+    players = [{"agent_id": a, "name": a.title()} for a in ("phong", "linh")]
+    rotunda = [s for s in SPOTS if s.id == "rotunda"]
+    challenge, _ = asyncio.run(designer.design(object(), "m", 5, players, place, "Saturday", spots or rotunda, POSES, "m1", organizer))
     return challenge["round"]["meet"]["spot"]
 
 
 def test_meeting_point_comes_from_the_organizer_then_claude_then_the_entrance(monkeypatch):
     assert design_with(monkeypatch, "the Apify booth, near the snacks") == "the Apify booth, near the snacks"
-    assert design_with(monkeypatch, "the Apify booth", organizer="the rotunda steps") == "the rotunda steps"
+    assert design_with(monkeypatch, "the Apify booth", organizer="the main stage") == "the main stage"
     assert design_with(monkeypatch, "") == "the main entrance of the Palace of Fine Arts"
     assert design_with(monkeypatch, "x" * 200) == "the main entrance of the Palace of Fine Arts"
+    assert design_with(monkeypatch, "the rotunda steps") == "the main entrance of the Palace of Fine Arts"  # the answer
+    assert design_with(monkeypatch, "The Lyon Street doors") == "the Lyon Street doors"  # it follows "Meet at"
 
 
-def test_past_feedback_shortens_the_built_in_hunt_and_tells_only_that_player():
-    said_long = 'Played "Coral Hunt" with Linh (2 people) and rated it 2/5. They said: "fun but too long". Wants to meet them again.'
-    loved_it = 'Played "Coral Hunt" with Phong (2 people) and rated it 5/5. They said: "loved it". Wants to meet them again.'
+def test_past_feedback_shortens_the_fallback_and_tells_only_that_player():
+    said_long = 'Played "Spot & Pose" with Linh (2 people) and rated it 2/5. They said: "fun but too long". Wants to meet them again.'
+    loved_it = 'Played "Spot & Pose" with Phong (2 people) and rated it 5/5. They said: "loved it". Wants to meet them again.'
     players = [
         {"agent_id": "phong", "name": "Phong", "past_challenges": [said_long]},
         {"agent_id": "linh", "name": "Linh", "past_challenges": [loved_it]},
     ]
-    rnd = designer.fallback(players, "m2")["round"]
+    rnd = designer.fallback(players, SPOTS, POSES, "m2")["round"]
     assert rnd["timer_min"] == designer.SHORT_TIMER_MIN
     assert rnd["tuned"] == {"phong": "Kept it to 10 minutes, since your last one ran long."}
-    assert "tuned" not in public_round(rnd)  # private, like the parts
+    assert "tuned" not in public_round(rnd)  # private, like the words
 
     # Only the players' own words count: a "long" elsewhere in the memory (a name, a title) doesn't.
     plain = [{"agent_id": "x", "name": "X", "past_challenges": ['Played "The Long Walk" and rated it 4/5.']}]
-    assert designer.fallback(plain, "m3")["round"]["timer_min"] == 15
+    assert designer.fallback(plain, SPOTS, POSES, "m3")["round"]["timer_min"] == 15
 
 
 def test_claude_adjustments_reach_only_known_players(monkeypatch):
     from agents.place import Place
 
-    members = {"phong": "Find one for Linh.", "linh": "Find one for Phong."}
-    c = invented(members).model_copy(update={"adjustments": [
-        designer.Adjustment(agent_id="phong", note="Kept it short, since your last one ran long."),
-        designer.Adjustment(agent_id="stranger", note="Not in this group."),
-    ]})
+    out = Words(
+        words=[Word(agent_id="phong", word="look up"), Word(agent_id="linh", word="stone")],
+        timer_min=10,
+        adjustments=[
+            designer.Adjustment(agent_id="phong", note="Kept it short, since your last one ran long."),
+            designer.Adjustment(agent_id="stranger", note="Not in this group."),
+        ],
+    )
 
     async def parse(*_, **__):
-        return c
+        return out
 
     monkeypatch.setattr(designer.llm, "parse", parse)
     place = Place(event="Cal Hacks 13", location="Palace of Fine Arts", city="San Francisco", hour="2026-10-24T14", facts=[], images=[], scraped=False, fetched_at=0)
-    players = [{"agent_id": a, "name": a.title()} for a in members]
-    challenge, _ = asyncio.run(designer.design(object(), "m", 5, players, place, "Saturday", "m1"))
-    assert challenge["round"]["tuned"] == {"phong": "Kept it short, since your last one ran long."}
+    players = [{"agent_id": a, "name": a.title()} for a in ("phong", "linh")]
+    rotunda = [s for s in SPOTS if s.id == "rotunda"]
+    rnd = asyncio.run(designer.design(object(), "m", 5, players, place, "Saturday", rotunda, POSES, "m1"))[0]["round"]
+    assert rnd["tuned"] == {"phong": "Kept it short, since your last one ran long."} and rnd["timer_min"] == 10

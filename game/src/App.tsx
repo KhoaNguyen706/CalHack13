@@ -1,6 +1,7 @@
 // Game page for one player: /?match=<match_id>&agent=<agent_id>
-// The challenge the AI invented for this group: your part (and hint), who's here, "We're here", then the photo steps
-// (each checked by the AI), the group photo, and the end screen (rating, meet again?, OK to share the photo?).
+// Spot & Pose: your secret word and your piece of a meme picture. The group meets, shares them to work out the spot and
+// the pose, taps "We're here", then takes one group photo there doing the pose, which the AI checks. Then the end
+// screen (rating, meet again?, OK to share the photo?).
 import { useEffect, useRef, useState } from 'react';
 import { useReducer, useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { reducers, tables } from './module_bindings';
@@ -21,12 +22,22 @@ if (MATCH) {
   }
 }
 
-type Step = { id: string; task: string; passed: boolean; reason: string | null };
+const PIECE_HEIGHT = 300; // px: a piece is a tall strip, so its height sets its size
+
+// The picture, and where it's cut: piece i runs from cuts[i] to cuts[i + 1] (fractions of the width).
+type Pose = { image: string; cuts: number[]; top?: number };
 type View = {
   state: string;
   members: { agent_id: string; name: string }[];
-  challenge: { title?: string; goal?: string; steps?: { id: string; task: string }[]; meet?: Meet | null } | null;
-  progress: { steps: Step[]; done: boolean } | null;
+  challenge: {
+    title?: string;
+    goal?: string;
+    steps?: { id: string; task: string }[];
+    meet?: Meet | null;
+    pose?: Pose | null;
+    pieces?: Record<string, number> | null; // agent_id -> their piece
+    shared?: Record<string, string> | null; // agent_id -> the word of someone who left
+  } | null;
 };
 type Summary = { waiting_for: string[]; mutual_meet_again: boolean; my_matches: string[]; share_ok: boolean };
 
@@ -69,7 +80,8 @@ function useMinutesLeft(startedAtMs: number | undefined, timerMin: number | unde
   return Math.max(0, Math.ceil((startedAtMs + timerMin * 60_000 - now) / 60_000));
 }
 
-// The challenge as everyone may see it (title, goal, steps and their progress), from the agents service.
+// The challenge as everyone may see it (title, goal, where to meet, the picture's cuts, who holds which piece), from
+// the agents service.
 function useChallenge() {
   const [view, setView] = useState<View>();
   useEffect(() => {
@@ -86,11 +98,44 @@ function useChallenge() {
       clearInterval(id);
     };
   }, []);
-  return [view, setView] as const;
+  return view;
 }
 
-// A hidden camera input: capture opens the camera straight away on phones.
-function Camera({ facing, label, busy, big, onPhoto }: { facing: 'user' | 'environment'; label: string; busy: string; big?: boolean; onPhoto: (f: File) => Promise<unknown> }) {
+// height / width of an image; null if it can't be loaded.
+function useRatio(src: string) {
+  const [ratio, setRatio] = useState<number | null>();
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => setRatio(img.naturalHeight / img.naturalWidth);
+    img.onerror = () => setRatio(null);
+    img.src = src;
+  }, [src]);
+  return ratio;
+}
+
+// One piece of the pose picture: a strip of the whole image, cropped in the browser.
+function Piece({ pose, index }: { pose: Pose; index: number }) {
+  const ratio = useRatio(pose.image);
+  const x0 = pose.cuts[index] ?? 0;
+  const w = (pose.cuts[index + 1] ?? 1) - x0;
+  const top = pose.top ?? 0;
+  if (ratio === null) return <p className="muted small">Couldn't load this piece of the picture.</p>;
+  if (ratio === undefined || w <= 0) return <p className="muted small">Loading the picture…</p>;
+  const aspect = w / (ratio * (1 - top)); // the piece's width / height
+  return (
+    <div className="piece" style={{ width: `min(100%, ${Math.round(PIECE_HEIGHT * aspect)}px)`, aspectRatio: `${aspect}` }}>
+      <img
+        src={pose.image}
+        alt="A piece of the picture"
+        style={{ width: `${100 / w}%`, marginLeft: `${(-x0 / w) * 100}%`, marginTop: `${((-top * ratio) / w) * 100}%` }}
+      />
+    </div>
+  );
+}
+
+// A hidden photo input. With `facing` it opens the camera straight away on phones; without it, phones also offer the
+// photo library, so a photo taken on the camera's timer works too.
+function Camera({ facing, label, busy, big, onPhoto }: { facing?: 'user' | 'environment'; label: string; busy: string; big?: boolean; onPhoto: (f: File) => Promise<unknown> }) {
   const input = useRef<HTMLInputElement>(null);
   const [working, setWorking] = useState(false);
   return (
@@ -150,23 +195,24 @@ export default function App() {
   const [seats] = useTable(tables.seat.where(r => r.matchId.eq(MATCH)));
   const [photos] = useTable(tables.photo.where(r => r.matchId.eq(MATCH)));
   const [myKeys] = useTable(tables.myKey);
-  const [myHints] = useTable(tables.myHint);
-  const [view, setView] = useChallenge();
+  const view = useChallenge();
 
   const [error, setError] = useState('');
-  const [showHint, setShowHint] = useState(false);
   const [sign, setSign] = useState(false); // the group's sign, full screen
-  const [notQuite, setNotQuite] = useState<Record<string, string>>({}); // step -> why its last photo didn't pass
+  const [notQuite, setNotQuite] = useState(''); // why the last group photo didn't pass
   const joined = useRef(false);
 
   const round = rounds[0];
-  const myKey = myKeys.find(k => k.matchId === MATCH);
-  const myHint = myHints.find(h => h.matchId === MATCH)?.hint;
+  const myWord = myKeys.find(k => k.matchId === MATCH)?.key;
   const mySeat = seats.find(s => identity && s.player?.isEqual(identity));
   const minutesLeft = useMinutesLeft(round?.startedAt.toDate().getTime(), round?.timerMin);
   const names = Object.fromEntries((view?.members ?? []).map(m => [m.agent_id, m.name]));
   const nameOf = (id: string) => names[id] ?? title(id);
-  const steps = view?.progress?.steps ?? [];
+  const challenge = view?.challenge;
+  const pose = challenge?.pose;
+  const pieces = challenge?.pieces ?? {};
+  const shared = Object.entries(challenge?.shared ?? {});
+  const photoStep = challenge?.steps?.[0]?.id;
 
   // Claim this person's seat once the round exists.
   useEffect(() => {
@@ -187,19 +233,18 @@ export default function App() {
     location.assign(CHAT);
   };
 
-  // One step's photo: the AI checks it and every phone sees the ✓.
-  const checkStep = async (step: string, file: File) => {
-    const out = await post<{ passed: boolean; reason: string; steps: Step[]; done: boolean }>(
-      `${AGENTS}/challenges/${MATCH}/check`,
-      { step, agent_id: AGENT, image_base64: await shrink(file), media_type: 'image/jpeg' },
-    );
-    setView(v => (v ? { ...v, progress: { steps: out.steps, done: out.done } } : v));
-    setNotQuite(n => ({ ...n, [step]: out.passed ? '' : out.reason }));
-  };
-
-  // The group photo -> agents service (stores it, gives a link) -> the live board, which completes the round.
+  // The group photo: the AI checks the spot and the pose. Once it passes it goes to the agents service (stores it,
+  // gives a link) and then the live board, which completes the round on every phone.
   const groupPhoto = async (file: File) => {
-    const { path } = await post<{ path: string }>(`${AGENTS}/photos`, { match_id: MATCH, agent_id: AGENT, image_base64: await shrink(file) });
+    const image = await shrink(file);
+    if (photoStep) {
+      const out = await post<{ passed: boolean; reason: string }>(`${AGENTS}/challenges/${MATCH}/check`, {
+        step: photoStep, agent_id: AGENT, image_base64: image, media_type: 'image/jpeg',
+      });
+      if (!out.passed) return setNotQuite(out.reason);
+    }
+    setNotQuite('');
+    const { path } = await post<{ path: string }>(`${AGENTS}/photos`, { match_id: MATCH, agent_id: AGENT, image_base64: image });
     await submitPhoto({ matchId: MATCH, url: AGENTS + path });
   };
 
@@ -231,7 +276,14 @@ export default function App() {
         <Top heading="All done" />
         <section className="card">
           <CardHead eyebrow="Challenge done" tone="green" title="You did it!" sub={others.length ? `With ${others.join(' and ')}` : undefined} />
+          {round.answer && <p>It was <b>{round.answer}</b>.</p>}
           {photos[0] && <img className="group-photo" src={photos[0].url} alt="Your group photo" />}
+          {pose && (
+            <>
+              <p className="eyebrow muted">The original</p>
+              <img className="group-photo" src={pose.image} alt="The pose you recreated" />
+            </>
+          )}
         </section>
         <EndScreen photoUrl={photos[0]?.url} />
         {error && <p className="error">{error}</p>}
@@ -240,54 +292,56 @@ export default function App() {
   }
 
   const unlocked = round.state === 'unlocked';
-  const passed = steps.filter(s => s.passed).length;
   const here = seats.filter(s => s.checkedIn).length;
-  const meet = view?.challenge?.meet;
+  const meet = challenge?.meet;
 
   return (
     <Shell>
-      <Top heading={view?.challenge?.title ?? 'Challenge'} minutes={minutesLeft} />
+      <Top heading={challenge?.title ?? 'Challenge'} minutes={minutesLeft} />
 
       {/* Until everyone's here: where to meet and the sign to hold up, before anything else. */}
       {meet && round.state === 'playing' && <MeetCard meet={meet} onShow={() => setSign(true)} />}
       {meet && sign && <SignScreen meet={meet} onClose={() => setSign(false)} />}
 
-      {myKey ? (
+      {myWord !== undefined ? (
         <section className="card hero">
-          <CardHead eyebrow="Your part" />
-          {/* Claude writes parts of any length: a short key stays big, a long one reads like a note. */}
-          <h2 className={myKey.key.length > 120 ? 'long' : myKey.key.length > 60 ? 'mid' : undefined}>{myKey.key}</h2>
-          {view?.challenge?.goal && <p className="muted">{view.challenge.goal}</p>}
-          <p className="muted small">Tell your group your part. Nobody can finish alone.</p>
-          {myHint && (showHint ? <p className="hint">💡 {myHint}</p> : <button className="link" onClick={() => setShowHint(true)}>Need a hint?</button>)}
+          <CardHead eyebrow="Your word" />
+          <h2>{myWord}</h2>
+          {pose && pieces[AGENT] !== undefined && (
+            <>
+              <p className="eyebrow muted">Your piece of the picture</p>
+              <Piece pose={pose} index={pieces[AGENT]} />
+            </>
+          )}
+          {challenge?.goal && <p className="muted">{challenge.goal}</p>}
+          <p className="muted small">Only you have these. Show your group, and look at theirs. Nobody can finish alone.</p>
         </section>
       ) : (
         <section className="card plain"><p className="muted">Joining as {nameOf(AGENT)}…</p></section>
       )}
 
+      {shared.length > 0 && (
+        <section className="card plain">
+          <span className="eyebrow muted">From people who left</span>
+          {shared.map(([id, word]) => (
+            <div key={id} className="shared">
+              <p>{nameOf(id)}'s word: <b>{word}</b></p>
+              {pose && pieces[id] !== undefined && <Piece pose={pose} index={pieces[id]} />}
+            </div>
+          ))}
+        </section>
+      )}
+
       <section className="card plain">
-        <div className="split-head">
-          <span className="eyebrow muted">Steps</span>
-          {steps.length > 0 && <span className="muted small"><b>{passed} of {steps.length}</b> done</span>}
-        </div>
+        <span className="eyebrow muted">Steps</span>
         <ol className="step-list">
           <li className={unlocked ? 'done' : 'cur'}>
             <p className="step"><span className="dot">{unlocked && <Icon name="check" size={14} />}</span>{meet ? `Meet at ${meet.spot} and tap We're here` : "Meet your group and tap We're here"}</p>
           </li>
-          {steps.map(s => (
-            <li key={s.id} className={s.passed ? 'done' : unlocked ? 'cur' : 'lock'}>
-              <p className="step"><span className="dot">{s.passed && <Icon name="check" size={14} />}</span>{s.task}</p>
-              {s.passed && s.reason && <p className="why">{s.reason}</p>}
-              {!s.passed && unlocked && (
-                <>
-                  {notQuite[s.id] && <p className="why not">Not quite: {notQuite[s.id]}</p>}
-                  <Camera facing="environment" label={notQuite[s.id] ? 'Try another photo' : 'Photo for this step'} busy="Checking…" onPhoto={f => run(checkStep(s.id, f))} />
-                </>
-              )}
-            </li>
-          ))}
-          <li className={unlocked && passed === steps.length ? 'cur' : 'lock'}>
-            <p className="step"><span className="dot" />Take the group photo</p>
+          <li className={unlocked ? 'cur' : 'lock'}>
+            <p className="step"><span className="dot" />Go to the spot and take the group photo, doing the pose</p>
+            {unlocked && <p className="why">Ask someone nearby to take it, or prop a phone up and use its timer.</p>}
+            {notQuite && <p className="why not">Not quite: {notQuite}</p>}
           </li>
         </ol>
       </section>
@@ -315,7 +369,7 @@ export default function App() {
       ) : (
         <button className="btn primary big" disabled={!mySeat} onClick={() => run(checkIn({ matchId: MATCH }))}>We're here</button>
       ))}
-      {unlocked && <Camera facing="user" big label="Take the group photo" busy="Sending the photo…" onPhoto={f => run(groupPhoto(f))} />}
+      {unlocked && <Camera big label={notQuite ? 'Try another photo' : 'Add the group photo'} busy="Checking…" onPhoto={f => run(groupPhoto(f))} />}
 
       <button className="link" onClick={() => run(leave())}>Leave challenge</button>
       {error && <p className="error">{error}</p>}

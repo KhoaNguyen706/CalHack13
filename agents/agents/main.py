@@ -14,7 +14,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
-from . import chat, llm, spacetimeauth, sponsors, timeutil
+from . import chat, designer, llm, spacetimeauth, sponsors, timeutil
 from .config import Settings
 from .coordinator_client import CoordinatorClient, CoordinatorError
 from .memory import Memory
@@ -64,6 +64,7 @@ def create_app(
             svc = AgentsService(
                 s, store, memory, CoordinatorClient(coord_http), claude_client, place, load_contexts(),
                 sponsors.load_booths(), sponsors.load_sponsors(), load_contexts(DEMO_PEOPLE),
+                designer.load_spots(), designer.load_poses(),
             )
             app.state.svc = svc
             app.state.web = web

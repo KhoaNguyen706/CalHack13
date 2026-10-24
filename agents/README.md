@@ -35,8 +35,10 @@ CHALLENGE_DESIGNER_URL=http://localhost:8100/challenge .venv/bin/python -m uvico
 2. One of them starts a challenge and picks the size (3-5; never fewer than 3 strangers), in the chat or with Start.
 3. The coordinator invites other people's agents. Each agent answers from its context ("can do 90 minutes");
    invited people tap Accept. The host hears "Jess joined (2 of 4)".
-4. When everyone's in, Claude invents the challenge; each phone shows the steps and that person's part.
-5. The group plays; each step's photo goes to the photo check. Then the end screen: rate, meet again?, share?
+4. When everyone's in, the challenge is set up: Spot & Pose. Each phone shows that person's secret word and their
+   piece of a meme picture.
+5. The group shares words and pieces, goes to the spot and takes one group photo doing the pose; the photo check
+   looks at both. Then the end screen: rate, meet again?, share?
 
 Fewer real people than you want for a rehearsal? `POST /contexts/seed?shift_to_now=true` checks the unclaimed
 contexts in as stand-in agents, which accept on their own.
@@ -48,7 +50,7 @@ coordinator without that route, it falls back to `/matching/run`.
 
 | Var | Default | What |
 | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | none | Claude for agents, chat, designer and photo checks. Without it: rule answers, a built-in color hunt, photos always pass. |
+| `ANTHROPIC_API_KEY` | none | Claude for agents, chat, designer and photo checks. Without it: rule answers, hand-written words, photos always pass. |
 | `APIFY_TOKEN` | none | Scrapes place info and reference photos. Without it: built-in hackathon facts. |
 | `MOSS_PROJECT_ID`, `MOSS_PROJECT_KEY` | none | Semantic memory recall. Without them: newest memories from SQLite. |
 | `MOSS_INDEX` | `agent-memory` | Use a fresh name for the demo, so test memories don't carry over. |
@@ -72,15 +74,16 @@ coordinator without that route, it falls back to `/matching/run`.
 | POST | `/chat/{id}` | `{"message"}` | One chat turn. Returns `reply` + status. |
 | POST | `/users/{id}/start` | `{"size": 3-5}` (default 3) | Start a challenge; the coordinator invites the rest. |
 | POST | `/users/{id}/accept` | `{"accept": true\|false}` | Answer an invitation. |
-| POST | `/challenges/{match_id}/check` | `{"step": "s1", "agent_id", "image_url"}` or `{..., "image_base64", "media_type"}` | Photo check: `passed`, `reason`, and the whole progress. Keep images under 5 MB. |
+| POST | `/challenges/{match_id}/check` | `{"step": "photo", "agent_id", "image_url"}` or `{..., "image_base64", "media_type"}` | Photo check: `passed`, `reason`, and the whole progress. Keep images under 5 MB. |
 | GET | `/challenges/{match_id}/progress` | | `steps` with `passed`, `done`. |
 | POST | `/feedback` | `{"match_id", "agent_id", "rating", "meet_again", "share_ok", "comment"}` | End screen. The rating becomes a memory. |
 | GET | `/feedback/{match_id}?agent_id=` | | `waiting_for`, `mutual_meet_again`, `my_matches` (only if you said yes), `share_ok` (all said OK). |
 | GET | `/stats` | | `"X of Y groups wanted to meet again"`. |
 
-Status `challenge` is what every player sees: `title`, `goal`, `connection_hook`, `steps` (`id`, `task`,
-`check`), `reference_photo`, `timer_min`. `my_part` is that person's own job; other players' parts stay hidden.
-The same parts reach the SpacetimeDB board as each seat's key. Transcript lines have `role`: `user`, `agent`
+Status `challenge` is what every player sees: `title`, `goal`, `steps` (`id`, `task`; not the check, which names
+the spot), `pose` (the meme `image` and the `cuts` between pieces), `pieces` (who holds which piece), `shared`
+(the words of people who left), `timer_min`. `my_part` is that person's own word; other players' words stay
+hidden. The same words reach the SpacetimeDB board as each seat's key. Transcript lines have `role`: `user`, `agent`
 or `update` (invitations, joins, steps passed).
 
 The coordinator calls `POST /agents/{id}/question` (the `callback_url` of every agent we run) and
@@ -107,12 +110,13 @@ The coordinator calls `POST /agents/{id}/question` (the `callback_url` of every 
   memories, so the next answer changes. Moss writes run in a worker process (they block for seconds otherwise).
 - **Sample chatbot** (`chat.py`). Claude with tools: `start_challenge(size)`, `respond_to_invite`,
   `my_challenge`, `save_profile`. Coordinator news reaches it as `[Update: …]` lines in the next turn.
-- **Challenge designer** (`designer.py`). Claude invents the challenge from the players' first names and
-  interests, the place facts, the scraped photos and the sponsor booths, in the style of our examples (find this
-  spot, checkpoint run, color hunt, personal theme hunt, …). Code checks one part per player, 1-6 steps with a
-  photo check each, and that a reference photo really was scraped. Anything wrong → a built-in color hunt.
+- **Challenge designer** (`designer.py`): Spot & Pose. Each match gets a spot (`data/spots.json` plus verified
+  booths) and a meme with one character per player (`data/poses.json`), picked at random so groups spread out.
+  Claude writes one word per player: alone a word could mean anything, together they point to the spot. Code
+  checks one word per player, all different, none giving the spot away. Anything wrong → the spot's hand-written
+  words. Each player's piece is a strip of the meme, cropped on their phone.
 - **Sponsor booths** (`data/booths.json`, `data/sponsors.json`, `sponsors.py`). What each sponsor does and where
-  its booth is. Claude only sends people to booths marked `"verified": true`.
+  its booth is. Only booths marked `"verified": true` become spots.
 - **Photo checks** (`vision.py`). Photos are downloaded and sent inline. Generous about angles and blur, strict
   about strangers' faces. A photo that can't be opened fails; without Claude, or if Claude errors, it counts.
 - **Place info** (`place.py`). Apify's RAG Web Browser searches the place, the event and this month; Claude

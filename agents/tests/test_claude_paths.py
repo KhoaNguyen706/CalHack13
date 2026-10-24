@@ -10,10 +10,9 @@ from anthropic.types import Message
 from fastapi.testclient import TestClient
 
 from agents.config import Settings
-from agents.designer import Invented, Part, Step
+from agents.designer import Word, Words
 from agents.main import create_app
 from agents.models import Answer
-from agents.place import Image
 from agents.vision import Verdict
 
 from .test_api import FakeCoordinator, login
@@ -45,15 +44,15 @@ class FakeClaude:
 
 
 def web(request: httpx.Request) -> httpx.Response:
-    """The open web, for downloading photos: PNGs exist, an HTML page isn't a photo, the rest is missing."""
-    if request.url.path.endswith(".png"):
+    """The open web, for downloading photos: images exist, an HTML page isn't a photo, the rest is missing."""
+    if request.url.path.endswith((".png", ".jpg")):
         return httpx.Response(200, content=b"\x89PNG fake", headers={"content-type": "image/png"})
     if request.url.path.endswith(".html"):
         return httpx.Response(200, text="<html></html>", headers={"content-type": "text/html"})
     return httpx.Response(404)
 
 
-PARTS = {"phong": "Pick the corner Jess should start from.", "jess": "Spot the gold tiles before Phong does."}
+WORDS = {"phong": "look up", "jess": "stone"}
 
 
 @pytest.fixture
@@ -73,14 +72,8 @@ def setup(tmp_path):
         ],
         parsed={
             Answer: Answer(answer="no", note="prefers smaller groups"),
-            Invented: Invented(
-                title="Find This Spot", goal="Find the spot in the photo and match the angle.",
-                connection_hook="Split up, then call each other over when you find it.",
-                steps=[Step(task="Match the reference photo's angle.", check="Same view as the reference: dome over water.")],
-                parts=[Part(agent_id=a, part=p) for a, p in PARTS.items()], timer_min=12,
-                reference_photo="https://upload.example/palace.png",
-            ),
-            Verdict: Verdict(passed=True, reason="That's the dome from the same side, nice!"),
+            Words: Words(words=[Word(agent_id=a, word=w) for a, w in WORDS.items()]),
+            Verdict: Verdict(passed=True, reason="That's the spot, and you're both pointing. Nice!"),
         },
     )
     settings = Settings(
@@ -121,41 +114,35 @@ def test_invitation_answer_comes_from_claude(setup):
     assert '"size": 5' in sent and "Kenji" in sent
 
 
-def test_claude_invents_the_challenge_and_checks_photos(setup, monkeypatch):
+def test_claude_picks_the_spot_and_checks_the_photo(setup):
     client, coord, claude = setup
     login(client)
     login(client, "Jess", "id-jess")
-    svc = client.app.state.svc
-    # A scraped place with one photo, so the reference photo is allowed.
-    builtin = svc.place.builtin
-
-    def with_photo(at):
-        place = builtin(at)
-        place.images = [Image(url="https://upload.example/palace.png", about="Palace of Fine Arts", source="https://wiki.example")]
-        return place
-
-    monkeypatch.setattr(svc.place, "builtin", with_photo)
     match = coord.invite("phong", ["jess"], size=2)
     members = [{"agent_id": "phong", "interests": ["puzzles"]}, {"agent_id": "jess", "interests": ["campus"]}]
     challenge = client.post("/challenge", json={"match": match, "members": members}).json()
     rnd = challenge["round"]
-    assert rnd["title"] == "Find This Spot" and rnd["keys"] == PARTS and rnd["designed_by"] == "Claude + built-in place info"
-    assert rnd["reference_photo"] == "https://upload.example/palace.png" and "https://wiki.example" in rnd["sources"]
+    assert rnd["keys"] == WORDS and rnd["designed_by"] == "Claude + built-in place info"
+    spot = next(s for s in client.app.state.svc.spots if s.id == rnd["spot"])
+    assert rnd["answer"].startswith(f"{spot.name} · ") and len(rnd["pose"]["cuts"]) == 3  # a 2-person meme
     sent = json.loads(claude.requests[-1]["messages"][0]["content"])
     assert {"agent_id": "jess", "name": "Jess", "interests": ["campus"], "skills": []} in sent["players"]
-    booths = {b["sponsor"]: b["location"] for b in sent["sponsor_booths"]}
-    assert booths["Apify"] == "near the snacks" and booths["Anthropic"] is None  # only verified spots
+    assert sent["spot"]["name"] == spot.name and "spots" not in sent  # Claude only writes the words for this spot
+    apify = next(s for s in client.app.state.svc.spots if s.id == "apify_booth")  # only verified booths are spots
+    assert {s.id for s in client.app.state.svc.spots} == {"weeping_ladies", "rotunda", "lagoon", "apify_booth"}
+    assert "near the snacks" in apify.about and "apify" in apify.giveaways
 
     match.update(state="confirmed", accepted=["phong", "jess"], challenge=challenge)
-    out = client.post("/challenges/m1/check", json={"step": "s1", "agent_id": "jess", "image_base64": "aGk=", "media_type": "image/png"}).json()
-    assert out["passed"] and out["reason"].startswith("That's the dome") and out["done"]
+    out = client.post("/challenges/m1/check", json={"step": "photo", "agent_id": "jess", "image_base64": "aGk=", "media_type": "image/png"}).json()
+    assert out["passed"] and out["reason"].startswith("That's the spot") and out["done"]
     content = claude.requests[-1]["messages"][0]["content"]
     images = [b["source"] for b in content if b["type"] == "image"]
     png = base64.b64encode(b"\x89PNG fake").decode()
     assert images == [{"type": "base64", "media_type": "image/png", "data": png}, {"type": "base64", "media_type": "image/png", "data": "aGk="}]
+    assert f"Taken at {spot.name}" in content[-1]["text"]  # the meme is the reference; the check names the spot
 
     # A photo URL is downloaded and sent inline; one that isn't an image fails instead of counting.
-    out = client.post("/challenges/m1/check", json={"step": "s1", "image_url": "https://photos.example/us.png"}).json()
+    out = client.post("/challenges/m1/check", json={"step": "photo", "image_url": "https://photos.example/us.png"}).json()
     assert claude.requests[-1]["messages"][0]["content"][3]["source"]["type"] == "base64" and out["passed"]
-    out = client.post("/challenges/m1/check", json={"step": "s1", "image_url": "https://photos.example/page.html"}).json()
+    out = client.post("/challenges/m1/check", json={"step": "photo", "image_url": "https://photos.example/page.html"}).json()
     assert not out["passed"] and "couldn't open" in out["reason"]

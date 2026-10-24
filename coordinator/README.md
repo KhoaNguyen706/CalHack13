@@ -21,7 +21,7 @@ invitee → watch `/ws/log`.
 | `ANTHROPIC_API_KEY` | none | Enables the Claude match pick. Without it, matching uses the top rule score. |
 | `MATCH_WITH_CLAUDE` | `1` | `0` forces rule-only matching (handy for rehearsals). |
 | `MATCH_MODEL` | `claude-opus-5-5` | Model for the pick. |
-| `CHALLENGE_DESIGNER_URL` | none | Agents team's challenge designer. Unset or failing → built-in Three-key demo round. |
+| `CHALLENGE_DESIGNER_URL` | none | Agents team's challenge designer. Unset or failing → a built-in round whose words point to the Apify booth. |
 | `REPLY_TIMEOUT_S` | `20` | How long the broker waits for an agent before counting "no". |
 | `GROUP_SIZE` | `3` | Only for `/matching/run` (testing). With `POST /challenges` the host picks the size. |
 | `COORDINATOR_DB` | `coordinator.db` | SQLite file. Agents and matches survive restarts. |
@@ -114,9 +114,10 @@ Host-led example:
 
 On confirm, the coordinator POSTs `{"match": <Match>, "members": [{"agent_id", "role", "skills", "interests"}]}` (`role`
 is `"player"` for host-led groups) to
-`CHALLENGE_DESIGNER_URL` and expects the game template back (`{"group": [...], "round": {"type": "split_riddle",
-"keys": {<agent_id>: <key>, ...}, "answer", "unlock", "timer_min"}}`). `round.keys` must have one key per member. Other round fields (`type: "photo_challenge"`,
-`title`, `goal`, `steps`, …) pass through untouched.
+`CHALLENGE_DESIGNER_URL` and expects the game template back (`{"group": [...], "round": {"type": "spot_and_pose",
+"keys": {<agent_id>: <word>, ...}, "answer", "unlock", "timer_min"}}`). `round.keys` must have one key per member. Other
+round fields (`title`, `goal`, `steps`, `pose`, `pieces`, …) pass through untouched. When someone leaves, their
+key moves to `round.shared`, so the rest can still solve it.
 The designer can instead push it with `PUT /matches/{id}/challenge`.
 
 ## Live game hand-off (SpacetimeDB)

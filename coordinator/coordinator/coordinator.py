@@ -20,12 +20,9 @@ log = logging.getLogger(__name__)
 TIMER_MIN = 15
 MIN_GROUP = MIN_GROUP_SIZE  # a host-led challenge can start early with this many accepted
 ACTIVITY = "creative outdoor challenge"
-# Fallback round when no challenge designer is reachable: the demo's Three-key sponsor hunt.
-DEMO_KEYS = {
-    "riddles": "This sponsor's tool helps you scrape the web.",
-    "map": "Their booth is near the snacks.",
-    "camera": "Ask them: what's the coolest thing someone built with your tool?",
-}
+# Fallback round when no challenge designer is reachable: Spot & Pose without the picture. Together the words
+# point to the Apify booth.
+DEMO_WORDS = ["sponsor", "web scraping", "snacks", "actors", "data"]
 NEXT_STATE = {MatchState.confirmed: MatchState.playing, MatchState.playing: MatchState.done}
 
 
@@ -54,18 +51,25 @@ def pretty(w: Window) -> str:
 
 
 def default_challenge(match: Match) -> dict:
-    keys = list(DEMO_KEYS.values())
     return {
         "group": match.members,
         "round": {
-            "type": "split_riddle",
-            # Groups without fixed roles (host-led) get the demo keys in turn.
-            "keys": {m: DEMO_KEYS.get(match.roles.get(m), keys[i % len(keys)]) for i, m in enumerate(match.members)},
-            "answer": "apify_booth",
+            "type": "spot_and_pose",
+            "title": "Spot & Pose",
+            "goal": "Share your words to work out the spot, then take a group photo there.",
+            "keys": {m: DEMO_WORDS[i % len(DEMO_WORDS)] for i, m in enumerate(match.members)},
+            "answer": "the Apify booth",
             "unlock": "all_checked_in + photo",
             "timer_min": TIMER_MIN,
         },
     }
+
+
+def without(rnd: dict, gone: set[str]) -> dict:
+    """The round minus the words of people who left; their words go to `shared`, so the rest can still solve it."""
+    keys = rnd.get("keys") or {}
+    shared = {**(rnd.get("shared") or {}), **{m: k for m, k in keys.items() if m in gone}}
+    return {**rnd, "keys": {m: k for m, k in keys.items() if m not in gone}, "shared": shared}
 
 
 class Coordinator:
@@ -491,9 +495,8 @@ class Coordinator:
 
         update: dict = {"members": rest, "accepted": [m for m in match.accepted if m != agent_id], "size": len(rest)}
         if match.challenge:
-            rnd = match.challenge.get("round") or {}
-            keys = {m: k for m, k in (rnd.get("keys") or {}).items() if m != agent_id}
-            update["challenge"] = {**match.challenge, "group": rest, "round": {**rnd, "keys": keys}}
+            rnd = without(match.challenge.get("round") or {}, {agent_id})
+            update["challenge"] = {**match.challenge, "group": rest, "round": rnd}
         match = self.store.save_match(match.model_copy(update=update))
         self._release(match, [agent_id])
         self.events.emit(
@@ -561,9 +564,9 @@ class Coordinator:
         if match.state not in (MatchState.confirmed, MatchState.playing):
             raise Conflict(f"match is {match.state.value}; challenges attach to confirmed groups")
         keys = (challenge.get("round") or {}).get("keys") or {}
-        if set(keys) > set(match.members):  # someone left while it was being designed: drop their part
-            keys = {m: k for m, k in keys.items() if m in match.members}
-            challenge = {**challenge, "group": match.members, "round": {**challenge["round"], "keys": keys}}
+        if set(keys) > set(match.members):  # someone left while it was being designed: share their word
+            challenge = {**challenge, "group": match.members, "round": without(challenge["round"], set(keys) - set(match.members))}
+            keys = challenge["round"]["keys"]
         if set(keys) != set(match.members):
             raise ValueError("challenge.round.keys must have exactly one key per member")
         match = self.store.save_match(match.model_copy(update={"challenge": challenge}))
@@ -584,7 +587,7 @@ class Coordinator:
         rnd = match.challenge["round"]
         args = {
             "matchId": match_id,
-            "kind": rnd.get("type", "split_riddle"),
+            "kind": rnd.get("type", "spot_and_pose"),
             "timerMin": int(rnd.get("timer_min", TIMER_MIN)),
             "answer": str(rnd.get("answer", "")),
             "seats": [

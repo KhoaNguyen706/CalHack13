@@ -63,9 +63,10 @@ def test_confirm_starts_round_and_marks_playing(fake):
     wait_for(lambda: client.get(f"/matches/{mid}").json()["state"] == "playing")
     reducer, args = fake.calls[0]
     assert reducer == "start_round" and args["matchId"] == mid and args["timerMin"] == 15
-    assert args["answer"] == "apify_booth"
+    assert args["answer"] == "the Apify booth" and args["kind"] == "spot_and_pose"
     assert {s["agent_id"]: s["role"] for s in args["seats"]} == {"linh": "riddles", "marcus": "map", "priya": "camera"}
     assert all(s["key"] for s in args["seats"])
+    assert {s["key"] for s in args["seats"]} == {"sponsor", "web scraping", "snacks"}  # one word each
     assert all("hint" in s for s in args["seats"])  # the demo round has none; designed rounds pass theirs on
     assert "round live · 3 phones can join" in texts(client)
     client.__exit__(None, None, None)
@@ -80,9 +81,9 @@ def test_board_events_reach_the_log_and_finish_the_match(fake):
     wait_for(lambda: "everyone's here → group photo unlocked" in texts(client))
     assert texts(client).count("Linh: we're here ✓") == 1
 
-    fake.rounds[0].update(state="done", answer=[0, "apify_booth"])
+    fake.rounds[0].update(state="done", answer=[0, "the Apify booth"])
     wait_for(lambda: client.get(f"/matches/{mid}").json()["state"] == "done")
-    assert "photo in · challenge complete! answer: apify_booth" in texts(client)
+    assert "photo in · challenge complete! answer: the Apify booth" in texts(client)
     assert client.get("/agents/linh").json()["match_id"] is None  # back in the pool
     client.__exit__(None, None, None)
 
@@ -100,7 +101,8 @@ def test_leaving_mid_game_drops_the_seat_then_calls_it_off(fake):
 
     left = client.post(f"/matches/{mid}/leave", json={"agent_id": "marcus"}).json()
     assert left["state"] == "playing" and left["members"] == ["linh", "priya"]
-    assert set(left["challenge"]["round"]["keys"]) == {"linh", "priya"}
+    rnd = left["challenge"]["round"]
+    assert set(rnd["keys"]) == {"linh", "priya"} and set(rnd["shared"]) == {"marcus"}  # the rest still get the word
     assert fake.calls[-1] == ("drop_seat", {"matchId": mid, "agentId": "marcus"})
     assert client.get("/agents/marcus").json()["match_id"] is None
 

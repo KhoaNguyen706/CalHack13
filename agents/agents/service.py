@@ -74,9 +74,11 @@ PAST_CHALLENGES = "how did the last challenge go: too long, too hard, what they 
 
 
 def public_round(rnd: dict) -> dict:
-    """The challenge as every player may see it: everything except the other players' parts."""
-    keys = ("type", "title", "goal", "connection_hook", "steps", "reference_photo", "timer_min", "unlock", "meet")
-    return {k: rnd.get(k) for k in keys}
+    """The challenge as every player may see it: not the others' words, the answer, or the photo check (it names
+    the spot). `shared` holds the words of people who left, so the rest can still solve it."""
+    keys = ("type", "title", "goal", "pose", "pieces", "shared", "reference_photo", "timer_min", "unlock", "meet")
+    steps = [{"id": s["id"], "task": s["task"]} for s in rnd.get("steps") or []]
+    return {**{k: rnd.get(k) for k in keys}, "steps": steps}
 
 
 class AgentsService:
@@ -92,6 +94,8 @@ class AgentsService:
         booths: list[Booth] | None = None,
         sponsors: dict[str, SponsorInfo] | None = None,
         demo_people: list[PersonalContext] | None = None,
+        spots: list[designer.Spot] | None = None,
+        poses: list[designer.Pose] | None = None,
     ):
         self.s = settings
         self.store = store
@@ -102,15 +106,20 @@ class AgentsService:
         self.contexts = {c.id: c for c in contexts}
         # The demo presenters: their agents know them well, they're never stand-ins or handed to other sign-ins.
         self.demo_people = {c.id: c for c in demo_people or []}
-        self.booths = [
-            {
-                "sponsor": b.sponsor,
-                "what_it_does": (sponsors or {}).get(b.sponsor, SponsorInfo(sponsor=b.sponsor, what_it_does="")).what_it_does,
-                "location": b.location if b.verified else None,  # unverified spots are placeholders
-            }
+        # Where a challenge can send a group: the hand-picked spots here, plus sponsor booths whose spot is verified
+        # (the others are placeholders).
+        here = settings.area.strip().casefold()
+        info = sponsors or {}
+        self.spots = [s for s in spots or [] if s.area.strip().casefold() == here] + [
+            designer.Spot(
+                id=b.id, name=f"the {b.sponsor} booth", area=b.area, giveaways=sorted(b.giveaways),
+                about=f"{info[b.sponsor].what_it_does if b.sponsor in info else b.hint} The booth is {b.location}.",
+                check=f"a {b.sponsor} sponsor booth, banner or sign",
+            )
             for b in booths or []
-            if b.area.strip().casefold() == settings.area.strip().casefold()
+            if b.verified and b.area.strip().casefold() == here
         ]
+        self.poses = poses or []
         self._stand_in_free: dict[str, str] = {}  # the window each stand-in last checked in with
         self._locks: dict[str, asyncio.Lock] = {}
         self._accepting: set[tuple[str, str]] = set()
@@ -427,7 +436,7 @@ class AgentsService:
         match_id = (body.get("match") or {}).get("match_id", "")
         challenge, how = await designer.design(
             self.claude, self.s.designer_model, self.s.design_budget_s, players, place, f"{now:%A}, {now.hour % 12 or 12}:{now:%M %p}",
-            match_id, self.booths, self.s.meeting_point,
+            self.spots, self.poses, match_id, self.s.meeting_point,
         )
         challenge["round"]["designed_by"] = how
         log.info("designed %r for %s via %s", challenge["round"]["title"], challenge["group"], how)
@@ -452,7 +461,8 @@ class AgentsService:
         if verdict.passed:
             number = steps.index(step) + 1
             for a in match["members"]:
-                self.notify(a, f"{match_id}:{body.step}:passed", f"Step {number} of {len(steps)} done: {verdict.reason}")
+                if len(steps) > 1:
+                    self.notify(a, f"{match_id}:{body.step}:passed", f"Step {number} of {len(steps)} done: {verdict.reason}")
                 if progress["done"]:
                     self.notify(a, f"{match_id}:complete", "Challenge complete! Take a moment, then rate it on the end screen.")
         return {"step": body.step, "passed": verdict.passed, "reason": verdict.reason, **progress}
@@ -586,16 +596,15 @@ class AgentsService:
                 rnd = m["challenge"].get("round") or {}
                 for a in people:
                     others = " and ".join(self.display(o) for o in members if o != a)
-                    part = (rnd.get("keys") or {}).get(a, "")
+                    word = (rnd.get("keys") or {}).get(a, "")
                     meet = rnd.get("meet") or {}
                     where = (
                         f" Meet at {meet['spot']}. Look for phones showing {meet['emoji']} {meet['sign']}, and hold yours up too."
                         if meet.get("spot") else ""
                     )
-                    if rnd.get("goal"):
-                        text = f"Everyone's in! You're meeting {others}.{where} {rnd.get('title', 'Your challenge')}: {rnd['goal']} Your part: “{part}”"
-                    else:
-                        text = f"Everyone's in! You're meeting {others}.{where} Your key: “{part}” Read it out loud to your group."
+                    goal = rnd.get("goal") or "Share your words with your group to work out the spot."
+                    piece = " Your piece of the picture is on the game page." if rnd.get("pose") else ""
+                    text = f"Everyone's in! You're meeting {others}.{where} {rnd.get('title', 'Your challenge')}: {goal} Your word: “{word}”.{piece}"
                     if tuned := (rnd.get("tuned") or {}).get(a):  # only this player hears what their feedback changed
                         text += f" {tuned}"
                     self.notify(a, f"{mid}:challenge", text)

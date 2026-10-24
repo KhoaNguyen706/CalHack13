@@ -13,6 +13,7 @@ cooperative challenge they can only win together. Design: `Cal Hacks 13 — AI C
 Needs Docker Desktop (or Docker Engine + Compose).
 
 ```bash
+cp .env.example .env     # add ANTHROPIC_API_KEY (ask a teammate); .env is never committed
 docker compose up --build
 ```
 
@@ -44,7 +45,7 @@ curl -X POST localhost:8000/matches/<id>/accept -H 'Content-Type: application/js
 Open the game page three times (`agent=linh`, `agent=marcus`, `agent=priya`), tap "We're here" on each,
 then submit a photo URL. The coordinator log ends with `challenge complete!`.
 
-- Claude matching: set `ANTHROPIC_API_KEY` in your shell before `docker compose up`. Without it, matching uses the rule score.
+- Claude matching: put `ANTHROPIC_API_KEY` in `.env`. Without it, matching uses the rule score.
 - Phones on the same Wi-Fi: `SPACETIME_PUBLIC_WS=ws://<laptop-ip>:3000 docker compose up`, then open `http://<laptop-ip>:5173/...`.
 - Fresh start: `docker compose down -v`.
 - Code changes need a rebuild: `docker compose up --build`.

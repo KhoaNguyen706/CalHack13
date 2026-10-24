@@ -17,7 +17,11 @@ class Profile(BaseModel):
     skills: list[str] = []
     free: str | None = None  # "Sat 14:00-16:00"
     group_pref: GroupPref = "small"
-    about: str = ""  # bio and chat notes; never leaves this service
+    # Agent-side only, never sent to the coordinator:
+    about: str = ""  # bio and chat notes
+    style: str = ""  # one line on how this person decides
+    max_minutes: int | None = Field(default=None, ge=60)  # longest block they'll commit to
+    open_to_invites: bool = True
 
     @field_validator("free")
     @classmethod
@@ -38,12 +42,16 @@ class PersonalContext(BaseModel):
     skills: list[str] = []
     group_pref: GroupPref = "small"
     area: str | None = None  # None = the event's area
+    max_minutes: int | None = Field(default=None, ge=60)
+    open_to_invites: bool = True
+    style: str = ""
     bio: str
     memories: list[str] = []
 
     @property
     def profile(self) -> Profile:
-        return Profile(**self.model_dump(include={"interests", "skills", "free", "group_pref"}), about=self.bio)
+        keep = {"interests", "skills", "free", "group_pref", "style", "max_minutes", "open_to_invites"}
+        return Profile(**self.model_dump(include=keep), about=self.bio)
 
 
 class ChatLine(BaseModel):

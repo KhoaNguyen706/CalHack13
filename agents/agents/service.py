@@ -14,6 +14,7 @@ from .coordinator_client import CoordinatorClient, CoordinatorError
 from .memory import Memory
 from .models import Answer, ChatLine, Feedback, Login, PersonalContext, PhotoCheck, Profile, Question, User
 from .place import PlaceService
+from .sponsors import Booth, SponsorInfo
 from .store import Store
 
 log = logging.getLogger(__name__)
@@ -73,6 +74,8 @@ class AgentsService:
         claude: anthropic.AsyncAnthropic | None,
         place: PlaceService,
         contexts: list[PersonalContext],
+        booths: list[Booth] | None = None,
+        sponsors: dict[str, SponsorInfo] | None = None,
     ):
         self.s = settings
         self.store = store
@@ -81,6 +84,15 @@ class AgentsService:
         self.claude = claude
         self.place = place
         self.contexts = {c.id: c for c in contexts}
+        self.booths = [
+            {
+                "sponsor": b.sponsor,
+                "what_it_does": (sponsors or {}).get(b.sponsor, SponsorInfo(sponsor=b.sponsor, what_it_does="")).what_it_does,
+                "location": b.location if b.verified else None,  # unverified spots are placeholders
+            }
+            for b in booths or []
+            if b.area.strip().casefold() == settings.area.strip().casefold()
+        ]
         self._stand_in_free: dict[str, str] = {}  # the window each stand-in last checked in with
         self._locks: dict[str, asyncio.Lock] = {}
         self._accepting: set[tuple[str, str]] = set()
@@ -336,7 +348,8 @@ class AgentsService:
         place = await self.place.get(now)
         match_id = (body.get("match") or {}).get("match_id", "")
         challenge, how = await designer.design(
-            self.claude, self.s.model, self.s.design_budget_s, players, place, now.strftime("%A, %-I:%M %p"), match_id
+            self.claude, self.s.designer_model, self.s.design_budget_s, players, place, now.strftime("%A, %-I:%M %p"),
+            match_id, self.booths,
         )
         challenge["round"]["designed_by"] = how
         log.info("designed %r for %s via %s", challenge["round"]["title"], challenge["group"], how)

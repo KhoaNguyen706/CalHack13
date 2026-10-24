@@ -48,6 +48,18 @@ to `POST /matching/run`, so nothing is blocked.
 9. **MCP.** Add a `start_challenge(agent_id, size)` tool. `/matching/run` can stay for testing, but the app
    won't use it.
 
+## Since main got the live game board
+
+10. **`start_game` assumes roles.** It sends `"role": match.roles[m]` for every seat, which raises a `KeyError`
+    once roles are `{}` (point 3). Use `match.roles.get(m, "player")`, or drop `role` from the seat.
+11. **Photo challenges on the board.** Our designer now returns `type: "photo_challenge"`. The board still works
+    as is: each seat's key is that player's part, "We're here" unlocks, and the final group photo ends it
+    (`answer` is the challenge title, so the log line reads well). What it doesn't show yet are the steps:
+    they're in `challenge.round.steps`, and each step's photo is checked by the agents service
+    (`POST :8100/challenges/{match_id}/check`). Later, the board could take the steps in `start_round` and
+    track which ones passed.
+12. **`GROUP_SIZE`** only matters for `/matching/run`; with `POST /challenges` the host picks the size.
+
 ## What the agents service relies on
 
 | Where | What it reads or sends |

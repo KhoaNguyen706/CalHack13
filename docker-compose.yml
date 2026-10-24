@@ -1,0 +1,80 @@
+# Whole stack on any OS:  docker compose up --build
+#   coordinator  http://localhost:8000/docs   (negotiation log: ws://localhost:8000/ws/log)
+#   agents       http://localhost:8100/docs   (personal agents, challenge designer, photo checks)
+#   web app      http://localhost:5173  (log in, find a group, then the game page opens)
+#   spacetimedb  http://localhost:3000
+services:
+  spacetime:
+    build:
+      context: .
+      dockerfile: docker/spacetime.Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - shared:/shared
+    healthcheck:
+      test: ["CMD", "test", "-s", "/shared/spacetime_token"]
+      interval: 2s
+      retries: 90
+
+  coordinator:
+    build: ./coordinator
+    ports:
+      - "8000:8000"
+    environment:
+      SPACETIME_URL: http://spacetime:3000
+      SPACETIME_DB: threekey
+      COORDINATOR_DB: /data/coordinator.db
+      # Passed through only if set on your machine; without it matching uses the rule score.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # The agents service designs each round; if it's down, the coordinator uses its built-in demo round.
+      CHALLENGE_DESIGNER_URL: ${CHALLENGE_DESIGNER_URL:-http://agents:8100/challenge}
+      # 3 in the real design; GROUP_SIZE=2 docker compose up lets two browser windows play a whole round.
+      GROUP_SIZE: ${GROUP_SIZE:-3}
+    volumes:
+      - shared:/shared:ro
+      - coordinator-data:/data
+    depends_on:
+      spacetime:
+        condition: service_healthy
+
+  agents:
+    build: ./agents
+    ports:
+      - "8100:8100"
+    environment:
+      COORDINATOR_URL: http://coordinator:8000
+      # Persona callbacks go here; the coordinator reaches it over the Compose network.
+      AGENTS_PUBLIC_URL: http://agents:8100
+      # Without it, agents decide with rules and rounds are a built-in color hunt.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Optional: Apify scrapes place info for challenges; Moss finds relevant memories.
+      APIFY_TOKEN: ${APIFY_TOKEN:-}
+      MOSS_PROJECT_ID: ${MOSS_PROJECT_ID:-}
+      MOSS_PROJECT_KEY: ${MOSS_PROJECT_KEY:-}
+      MOSS_INDEX: ${MOSS_INDEX:-agent-memory}
+      AGENTS_DB: /data/agents.db
+      AGENTS_CACHE: /data/cache
+    volumes:
+      - agents-data:/data
+    depends_on:
+      - coordinator
+
+  game:
+    build: ./game
+    ports:
+      - "5173:5173"
+    environment:
+      # The browser connects to this, so it must be reachable from the phone/laptop, not from inside Docker.
+      # For phones on the same Wi-Fi: SPACETIME_PUBLIC_WS=ws://<your-laptop-ip>:3000 docker compose up
+      VITE_SPACETIMEDB_HOST: ${SPACETIME_PUBLIC_WS:-ws://localhost:3000}
+      VITE_SPACETIMEDB_DB_NAME: threekey
+      VITE_COORDINATOR_URL: ${COORDINATOR_PUBLIC_URL:-http://localhost:8000}
+    depends_on:
+      spacetime:
+        condition: service_healthy
+
+volumes:
+  shared:
+  coordinator-data:
+  agents-data:

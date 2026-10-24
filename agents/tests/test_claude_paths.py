@@ -1,6 +1,7 @@
 """The Claude code paths, driven by a scripted fake client built from the real SDK types (no network)."""
 
 import base64
+import json
 from types import SimpleNamespace
 
 import httpx
@@ -140,8 +141,10 @@ def test_claude_invents_the_challenge_and_checks_photos(setup, monkeypatch):
     rnd = challenge["round"]
     assert rnd["title"] == "Find This Spot" and rnd["keys"] == PARTS and rnd["designed_by"] == "Claude + built-in place info"
     assert rnd["reference_photo"] == "https://upload.example/palace.png" and "https://wiki.example" in rnd["sources"]
-    players = claude.requests[-1]["messages"][0]["content"]
-    assert '"name": "Jess"' in players and "reference_photos" in players
+    sent = json.loads(claude.requests[-1]["messages"][0]["content"])
+    assert {"agent_id": "jess", "name": "Jess", "interests": ["campus"], "skills": []} in sent["players"]
+    booths = {b["sponsor"]: b["location"] for b in sent["sponsor_booths"]}
+    assert booths["Apify"] == "near the snacks" and booths["Anthropic"] is None  # only verified spots
 
     match.update(state="confirmed", accepted=["phong", "jess"], challenge=challenge)
     out = client.post("/challenges/m1/check", json={"step": "s1", "agent_id": "jess", "image_base64": "aGk=", "media_type": "image/png"}).json()

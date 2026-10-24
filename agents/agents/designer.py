@@ -50,6 +50,8 @@ a teammate by name (`parts`, exactly one per player, using their agent_id).
 - Use what you know: the players' first names and interests, and the facts about the place. If a step needs \
 a reference photo, put one URL from `reference_photos` in `reference_photo`, exactly as given; otherwise leave \
 it empty. Never invent URLs.
+- Sponsor booths at the venue (`sponsor_booths`) can be spots too, e.g. "ask the sponsor a question, then a group \
+photo there". Only send people to a booth whose `location` is given; never make one up.
 - Refer to players by name or "they"; never guess anyone's gender.
 - Plain, warm, short sentences. Title: 2-5 words."""
 
@@ -99,6 +101,7 @@ def template(members: list[str], c: Invented, sources: list[str]) -> dict:
             "steps": [{"id": f"s{i}", "task": s.task.strip(), "check": s.check.strip()} for i, s in enumerate(c.steps, 1)],
             "keys": {p.agent_id: p.part.strip() for p in c.parts},  # each player's own part
             "reference_photo": c.reference_photo or None,
+            "answer": c.title.strip(),  # the game board reveals it at the end ("challenge complete! answer: …")
             "unlock": "every step's photo passes its check",
             "timer_min": max(5, min(30, c.timer_min)),
             "sources": sources,
@@ -125,9 +128,17 @@ def fallback(players: list[dict], match_id: str = "") -> dict:
 
 
 async def design(
-    claude: anthropic.AsyncAnthropic | None, model: str, budget_s: float, players: list[dict], place: Place, when: str, match_id: str = ""
+    claude: anthropic.AsyncAnthropic | None,
+    model: str,
+    budget_s: float,
+    players: list[dict],
+    place: Place,
+    when: str,
+    match_id: str = "",
+    booths: list[dict] | None = None,
 ) -> tuple[dict, str]:
-    """players: [{agent_id, name, interests, skills}]. Returns (challenge, how) where how says who wrote it."""
+    """players: [{agent_id, name, interests, skills}]; booths: [{sponsor, what_it_does, location}].
+    Returns (challenge, how) where how says who wrote it."""
     ids = [p["agent_id"] for p in players]
     if claude is None or not ids:
         return fallback(players, match_id), "built-in color hunt (Claude off)"
@@ -138,6 +149,7 @@ async def design(
             "players": players,
             "facts_about_the_place": [f.text for f in place.facts],
             "reference_photos": [{"url": i.url, "about": i.about} for i in place.images],
+            "sponsor_booths": booths or [],
         },
         indent=1,
     )

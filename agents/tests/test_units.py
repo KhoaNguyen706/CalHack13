@@ -31,9 +31,9 @@ def test_rule_answer_and_checks():
     assert personal.rule_answer(free, ask()).answer == "yes"
     assert personal.rule_answer(free, ask("Sat 18:00-19:00")).answer == "no"
     assert personal.rule_answer(Profile(), ask()).answer == "yes"  # nothing known: open to it
-    assert personal.checked(Answer(answer="counter", free="later")).answer == "no"
-    assert personal.checked(Answer(answer="counter", free="Sat 15:00-16:00")).free == "Sat 15:00-16:00"
-    assert personal.checked(Answer(answer="yes", free="Sat 15:00-16:00")).free is None
+    assert personal.checked(Answer(answer="counter", free="later"), free, ask()) is None  # rules decide
+    assert personal.checked(Answer(answer="counter", free="Sat 15:00-16:00"), free, ask()).free == "Sat 15:00-16:00"
+    assert personal.checked(Answer(answer="yes", free="Sat 15:00-16:00"), free, ask()).free is None
     assert "groups of 4" in personal.memory_query(ask(host="phong", size=4))
 
 

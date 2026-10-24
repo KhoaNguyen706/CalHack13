@@ -22,6 +22,9 @@ Demo in four calls: `POST /demo/seed` → `POST /matching/run` → `POST /matche
 | `CHALLENGE_DESIGNER_URL` | none | Agents team's challenge designer. Unset or failing → built-in Three-key demo round. |
 | `REPLY_TIMEOUT_S` | `20` | How long the broker waits for an agent before counting "no". |
 | `COORDINATOR_DB` | `coordinator.db` | SQLite file. Agents and matches survive restarts. |
+| `SPACETIME_TOKEN` | none | Token of the identity that published `game/spacetimedb`. Enables the live board. |
+| `SPACETIME_URL` | `http://127.0.0.1:3000` | SpacetimeDB server. |
+| `SPACETIME_DB` | `threekey` | Game database name. |
 
 ## Agent interface (frozen)
 
@@ -77,6 +80,13 @@ On confirm, the coordinator POSTs `{"match": <Match>, "members": [{"agent_id", "
 `CHALLENGE_DESIGNER_URL` and expects the game template back (`{"group": [...], "round": {"type": "split_riddle",
 "keys": {<agent_id>: <key>, ...}, "answer", "unlock", "timer_min"}}`). `round.keys` must have one key per member.
 The designer can instead push it with `PUT /matches/{id}/challenge`.
+
+## Live game hand-off (SpacetimeDB)
+
+After the challenge is attached, the coordinator calls the `start_round` reducer on the game database and the match
+goes `playing`. It polls the board every 1.5 s, logs each `[game] <name>: we're here ✓`, and marks the match `done`
+when the photo is in. Without `SPACETIME_TOKEN`, or if SpacetimeDB is down, the match stays `confirmed`.
+See `game/README.md` for the module.
 
 ## MCP adapter (stretch)
 

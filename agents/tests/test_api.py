@@ -126,20 +126,22 @@ def test_stand_ins_skip_claimed_contexts(client, coord):
     assert marcus["callback_url"] == "http://agents/agents/marcus/question"
     assert marcus["area"] == "Palace of Fine Arts" and alex["area"] == "SJSU"
     shifted = client.post("/contexts/seed?shift_to_now=true").json()
-    assert shifted["shift_to_now"] and "marcus" in shifted["agents"]
+    assert shifted["shift_to_now"] and "priya" in shifted["agents"]
     # Stand-ins judge plans against the window they checked in with, also after a restart.
-    q = {"question_id": "q1", "agent_id": "marcus", "question": "join?", "plan": {"window": coord.agents["marcus"]["free"]}}
-    assert client.post("/agents/marcus/question", json=q).json()["answer"] == "yes"
+    q = {"question_id": "q1", "agent_id": "priya", "question": "join?", "plan": {"window": coord.agents["priya"]["free"]}}
+    assert client.post("/agents/priya/question", json=q).json()["answer"] == "yes"
     client.app.state.svc._stand_in_free.clear()
-    assert client.post("/agents/marcus/question", json=q).json()["answer"] == "yes"
+    assert client.post("/agents/priya/question", json=q).json()["answer"] == "yes"
 
 
 def test_invitation_answer_shows_in_the_chat(client):
     login(client)
     login(client, "Jess", "id-jess")
     q = {"question_id": "q1", "agent_id": "x", "question": "join?", "plan": {"window": "Sat 14:00-16:00", "host": "phong", "size": 4}}
-    assert client.post("/agents/jess/question", json=q).json()["answer"] == "yes"
-    assert any("Phong's 4-person challenge, Sat 2:00–4:00pm. I said yes" in t for t in lines(client, "jess"))
+    # Jess borrows Marcus's context, which keeps plans to 90 minutes.
+    assert client.post("/agents/jess/question", json=q).json()["answer"] == "counter"
+    said = "Phong's 4-person challenge, Sat 2:00–4:00pm. I said counter (Sat 14:00-15:30): can do 90 minutes."
+    assert any(said in t for t in lines(client, "jess"))
 
 
 def test_start_asks_the_coordinator_for_that_size(client, coord):

@@ -1,4 +1,4 @@
-"""HTTP surface of the agents service. Run: uvicorn agents.main:app --port 8001 --reload"""
+"""HTTP surface of the agents service. Run: uvicorn agents.main:app --port 8100 --reload"""
 
 import asyncio
 import json
@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
-from . import chat, llm, timeutil
+from . import chat, llm, sponsors, timeutil
 from .config import Settings
 from .coordinator_client import CoordinatorClient, CoordinatorError
 from .memory import Memory
@@ -49,7 +49,10 @@ def create_app(
             await memory.start()
             claude_client = claude or llm.make_claude(s.use_claude)
             place = PlaceService(s, web, claude_client)
-            svc = AgentsService(s, store, memory, CoordinatorClient(coord_http), claude_client, place, load_contexts())
+            svc = AgentsService(
+                s, store, memory, CoordinatorClient(coord_http), claude_client, place, load_contexts(),
+                sponsors.load_booths(), sponsors.load_sponsors(),
+            )
             app.state.svc = svc
             tasks = [asyncio.create_task(svc.watch())] if watch else []
             if s.apify_token:
@@ -176,6 +179,20 @@ def create_app(
     async def seed(shift_to_now: bool = False) -> dict:
         """Rehearsals: check unclaimed contexts in as stand-in agents. shift_to_now moves Saturday windows to today."""
         return await guarded(svc().seed_stand_ins(shift_to_now))
+
+    # Paths from the first agents service, kept so main's README commands and old callbacks still work.
+
+    @app.get("/personas")
+    async def personas() -> list[dict]:
+        return svc().contexts_view()
+
+    @app.post("/personas/checkin-all")
+    async def checkin_all(shift_to_now: bool = False) -> dict:
+        return await guarded(svc().seed_stand_ins(shift_to_now))
+
+    @app.post("/personas/{agent_id}/ask")
+    async def ask(agent_id: str, body: Question) -> Answer:
+        return await svc().answer(body.model_copy(update={"agent_id": agent_id}))
 
     @app.post("/feedback")
     async def feedback(body: Feedback) -> dict:

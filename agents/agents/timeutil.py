@@ -53,6 +53,13 @@ def from_now(tz: str, hours: float = 2, at: datetime | None = None) -> str:
     return str(Window(DAYS[t.weekday()], start, min(start + int(hours * 60), LAST_MINUTE)))
 
 
+def shared(a: Window, b: Window) -> Window | None:
+    """The part of two windows that overlaps, if any."""
+    if a.day != b.day or min(a.end, b.end) <= max(a.start, b.start):
+        return None
+    return Window(a.day, max(a.start, b.start), min(a.end, b.end))
+
+
 def fits(plan: str, free: str) -> bool:
     """True when the plan's window sits inside the free window."""
     p, f = parse(plan), parse(free)

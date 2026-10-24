@@ -22,12 +22,13 @@ def _flag(name: str, default: str) -> bool:
 class Settings:
     coordinator_url: str = _env("COORDINATOR_URL", "http://localhost:8000")
     # Where the coordinator reaches this service; every agent's callback_url is built from it.
-    public_url: str = _env("AGENTS_PUBLIC_URL", "http://localhost:8001")
+    public_url: str = _env("AGENTS_PUBLIC_URL", "http://localhost:8100")
     db_path: str = _env("AGENTS_DB", "agents.db")
     cache_dir: Path = Path(_env("AGENTS_CACHE", str(ROOT / "cache")))
 
-    use_claude: bool = _flag("AGENTS_WITH_CLAUDE", "1")
+    use_claude: bool = _flag("AGENTS_WITH_CLAUDE", _env("AGENT_WITH_CLAUDE", "1"))  # either name works
     model: str = _env("AGENT_MODEL", "claude-opus-5-5")
+    designer_model: str = _env("DESIGNER_MODEL", _env("AGENT_MODEL", "claude-opus-5-5"))
     # Must stay under the coordinator's REPLY_TIMEOUT_S (20) and its 60 s challenge wait.
     reply_budget_s: float = float(_env("REPLY_BUDGET_S", "12"))
     design_budget_s: float = float(_env("DESIGN_BUDGET_S", "45"))

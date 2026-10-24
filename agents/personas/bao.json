@@ -1,0 +1,16 @@
+{
+  "agent_id": "bao",
+  "free": "Mon 11:00-14:00",
+  "interests": [
+    "transfer",
+    "campus"
+  ],
+  "skills": [
+    "map"
+  ],
+  "group_pref": "small",
+  "area": "SJSU",
+  "open_to_invites": true,
+  "style": "Knows campus; has class at 1:30pm on Mondays so keeps it to an hour.",
+  "max_minutes": 60
+}

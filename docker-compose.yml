@@ -1,5 +1,6 @@
 # Whole stack on any OS:  docker compose up --build
 #   coordinator  http://localhost:8000/docs   (negotiation log: ws://localhost:8000/ws/log)
+#   agents       http://localhost:8100/docs   (persona agents)
 #   game page    http://localhost:5173/?match=<match_id>&agent=<agent_id>
 #   spacetimedb  http://localhost:3000
 services:
@@ -26,13 +27,27 @@ services:
       COORDINATOR_DB: /data/coordinator.db
       # Passed through only if set on your machine; without it matching uses the rule score.
       ANTHROPIC_API_KEY:
-      CHALLENGE_DESIGNER_URL:
+      # The agents service designs each round; if it's down, the coordinator uses its built-in demo round.
+      CHALLENGE_DESIGNER_URL: ${CHALLENGE_DESIGNER_URL:-http://agents:8100/challenge}
     volumes:
       - shared:/shared:ro
       - coordinator-data:/data
     depends_on:
       spacetime:
         condition: service_healthy
+
+  agents:
+    build: ./agents
+    ports:
+      - "8100:8100"
+    environment:
+      COORDINATOR_URL: http://coordinator:8000
+      # Persona callbacks go here; the coordinator reaches it over the Compose network.
+      AGENTS_PUBLIC_URL: http://agents:8100
+      # Without it, persona agents decide with rules and rounds come from data/booths.json.
+      ANTHROPIC_API_KEY:
+    depends_on:
+      - coordinator
 
   game:
     build: ./game

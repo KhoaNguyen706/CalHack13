@@ -1,0 +1,15 @@
+{
+  "agent_id": "ravi",
+  "free": "Sun 09:00-11:00",
+  "interests": [
+    "puzzles",
+    "chess"
+  ],
+  "skills": [
+    "logic"
+  ],
+  "group_pref": "small",
+  "area": "UC Berkeley",
+  "open_to_invites": true,
+  "style": "Only free Sunday morning; says yes if it fits."
+}

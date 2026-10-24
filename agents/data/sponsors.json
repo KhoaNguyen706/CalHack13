@@ -1,0 +1,26 @@
+[
+  {
+    "sponsor": "Apify",
+    "what_it_does": "A web scraping and browser automation platform. People run ready-made scrapers called Actors, or publish their own, to pull data from any website.",
+    "notable_projects": [],
+    "source_url": "https://apify.com"
+  },
+  {
+    "sponsor": "Anthropic",
+    "what_it_does": "An AI safety company that makes Claude, an AI model people chat with and developers build apps and agents on.",
+    "notable_projects": [],
+    "source_url": "https://www.anthropic.com"
+  },
+  {
+    "sponsor": "SpacetimeDB",
+    "what_it_does": "A database that is also the game server: app logic runs inside the database, and clients subscribe to data and see every change in real time. Built for multiplayer games.",
+    "notable_projects": [],
+    "source_url": "https://spacetimedb.com"
+  },
+  {
+    "sponsor": "Cartesia",
+    "what_it_does": "Real-time voice AI: very fast, natural-sounding text-to-speech for voice agents and apps.",
+    "notable_projects": [],
+    "source_url": "https://cartesia.ai"
+  }
+]

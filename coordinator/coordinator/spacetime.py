@@ -6,6 +6,8 @@ Wire format notes (SpacetimeDB 2.x, TypeScript module):
 - SQL returns positional rows plus a schema; options come back as [tag, value] with tag 0 = some.
 """
 
+from pathlib import Path
+
 import httpx
 
 
@@ -14,10 +16,21 @@ class SpacetimeError(RuntimeError):
 
 
 class Spacetime:
-    def __init__(self, http: httpx.AsyncClient, base_url: str, database: str, token: str):
+    def __init__(self, http: httpx.AsyncClient, base_url: str, database: str, token: str, token_file: str | None = None):
         self.http = http
         self.base = f"{base_url.rstrip('/')}/v1/database/{database}"
-        self.headers = {"Authorization": f"Bearer {token}"}
+        self.token = token
+        # Under docker compose a restarted spacetime publishes with a new token; re-read it on every call.
+        self.token_file = token_file
+
+    @property
+    def headers(self) -> dict:
+        if self.token_file:
+            try:
+                self.token = Path(self.token_file).read_text(encoding="utf-8").strip() or self.token
+            except OSError:
+                pass
+        return {"Authorization": f"Bearer {self.token}"}
 
     async def call(self, reducer: str, args: dict) -> None:
         resp = await self.http.post(f"{self.base}/call/{reducer}", json=args, headers=self.headers, timeout=10)

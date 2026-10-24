@@ -31,14 +31,14 @@ services:
       CHALLENGE_DESIGNER_URL: ${CHALLENGE_DESIGNER_URL:-http://agents:8100/challenge}
       # 3 in the real design; GROUP_SIZE=2 docker compose up lets two browser windows play a whole round.
       GROUP_SIZE: ${GROUP_SIZE:-3}
+      # Re-read on every call: a restarted spacetime publishes with a new token.
+      SPACETIME_TOKEN_FILE: /shared/spacetime_token
     volumes:
       - shared:/shared:ro
       - coordinator-data:/data
     depends_on:
       spacetime:
         condition: service_healthy
-        # A restarted spacetime publishes with a new token; restart with it, or start_round fails with 401.
-        restart: true
 
   agents:
     build: ./agents
@@ -67,14 +67,25 @@ services:
     ports:
       - "5173:5173"
     environment:
-      # The browser connects to this, so it must be reachable from the phone/laptop, not from inside Docker.
-      # For phones on the same Wi-Fi: SPACETIME_PUBLIC_WS=ws://<your-laptop-ip>:3000 docker compose up
-      VITE_SPACETIMEDB_HOST: ${SPACETIME_PUBLIC_WS:-ws://localhost:3000}
+      # The page reaches the coordinator at /api and SpacetimeDB at /stdb on its own address (Vite proxies them),
+      # so phones and tunnels need no extra ports. Set these only to point the page somewhere else.
+      VITE_SPACETIMEDB_HOST: ${SPACETIME_PUBLIC_WS:-}
       VITE_SPACETIMEDB_DB_NAME: threekey
-      VITE_COORDINATOR_URL: ${COORDINATOR_PUBLIC_URL:-http://localhost:8000}
+      VITE_COORDINATOR_URL: ${COORDINATOR_PUBLIC_URL:-}
+      COORDINATOR_PROXY: http://coordinator:8000
+      SPACETIME_PROXY: http://spacetime:3000
     depends_on:
       spacetime:
         condition: service_healthy
+
+  # Public https link for phones on any network: docker compose --profile tunnel up -d, then
+  # docker compose logs tunnel | grep trycloudflare. Anyone with the link can use the app; stop it when done.
+  tunnel:
+    image: cloudflare/cloudflared:2026.10.0
+    command: tunnel --no-autoupdate --url http://game:5173
+    depends_on:
+      - game
+    profiles: ["tunnel"]
 
 volumes:
   shared:

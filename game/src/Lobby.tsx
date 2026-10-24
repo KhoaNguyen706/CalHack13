@@ -3,7 +3,8 @@
 // Each window keeps its own agent in the URL, so two windows on one laptop are two different people.
 import { useEffect, useState } from 'react';
 
-const API = import.meta.env.VITE_COORDINATOR_URL ?? 'http://localhost:8000';
+// Same address as the page (Vite proxies /api), unless a deploy points elsewhere.
+const API = import.meta.env.VITE_COORDINATOR_URL || `${location.origin}/api`;
 const AGENT = new URLSearchParams(location.search).get('agent') ?? '';
 
 type Agent = { agent_id: string; free: string; skills: string[]; area: string; match_id: string | null };

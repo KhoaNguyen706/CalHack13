@@ -59,7 +59,10 @@ Open the game page three times (`agent=linh`, `agent=marcus`, `agent=priya`), ta
 then submit a photo URL. The coordinator log ends with `challenge complete!`.
 
 - Claude matching: put `ANTHROPIC_API_KEY` in `.env`. Without it, matching uses the rule score.
-- Phones on the same Wi-Fi: `SPACETIME_PUBLIC_WS=ws://<laptop-ip>:3000 docker compose up`, then open `http://<laptop-ip>:5173/...`.
+- Phones: the page reaches the coordinator (`/api`) and SpacetimeDB (`/stdb`) through its own address, so only port
+  5173 matters. Same Wi-Fi: open `http://<laptop-ip>:5173`. Event Wi-Fi usually blocks that; use a public link instead:
+  `docker compose --profile tunnel up -d`, then `docker compose logs tunnel | grep trycloudflare` for the https URL.
+  Anyone with the link can use the app (and `/api/demo/reset`), so stop it when done: `docker compose stop tunnel`.
 - Fresh start: `docker compose down -v`.
 - Code changes need a rebuild: `docker compose up --build`.
 

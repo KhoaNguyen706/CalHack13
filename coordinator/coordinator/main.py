@@ -39,7 +39,7 @@ def make_spacetime(http: httpx.AsyncClient) -> Spacetime | None:
     if not token:
         return None
     url = os.environ.get("SPACETIME_URL", "http://127.0.0.1:3000")
-    return Spacetime(http, url, os.environ.get("SPACETIME_DB", "threekey"), token)
+    return Spacetime(http, url, os.environ.get("SPACETIME_DB", "threekey"), token, os.environ.get("SPACETIME_TOKEN_FILE"))
 
 
 def create_app(

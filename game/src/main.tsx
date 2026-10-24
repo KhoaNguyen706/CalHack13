@@ -7,8 +7,10 @@ import LiveLog from './LiveLog.tsx';
 import { SpacetimeDBProvider } from 'spacetimedb/react';
 import { DbConnection } from './module_bindings/index.ts';
 
-const HOST = import.meta.env.VITE_SPACETIMEDB_HOST ?? 'ws://localhost:3000';
-const DB_NAME = import.meta.env.VITE_SPACETIMEDB_DB_NAME ?? 'threekey';
+// Same address as the page (Vite proxies /stdb/), unless a deploy points elsewhere. The trailing slash matters:
+// the SDK resolves its paths against it.
+const HOST = import.meta.env.VITE_SPACETIMEDB_HOST || `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/stdb/`;
+const DB_NAME = import.meta.env.VITE_SPACETIMEDB_DB_NAME || 'threekey';
 // One identity per player link, so three tabs on one laptop can rehearse as three phones.
 const agent = new URLSearchParams(location.search).get('agent') ?? 'anon';
 const TOKEN_KEY = `${HOST}/${DB_NAME}/${agent}/auth_token`;

@@ -3,7 +3,8 @@
 // out, answers coming back, groups forming and checking in. Open it in a third window while two people play.
 import { useEffect, useRef, useState } from 'react';
 
-const API = import.meta.env.VITE_COORDINATOR_URL ?? 'http://localhost:8000';
+// Same address as the page (Vite proxies /api), unless a deploy points elsewhere.
+const API = import.meta.env.VITE_COORDINATOR_URL || `${location.origin}/api`;
 
 type LogEvent = { seq: number; ts: number; kind: string; text: string; data: Record<string, any> };
 type Status = 'pool' | 'asked' | 'yes' | 'no' | 'grouped' | 'accepted' | 'here' | 'done';

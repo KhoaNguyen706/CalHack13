@@ -99,11 +99,15 @@ export default function LiveLog() {
     return () => {
       stopped = true;
       clearTimeout(retry);
+      // Detach first: a late close/message from this socket must not touch the next mount's state.
+      ws.onopen = ws.onmessage = ws.onclose = null;
       ws.close();
     };
   }, []);
 
-  useEffect(() => feedEnd.current?.scrollIntoView({ block: 'end' }), [feed]);
+  useEffect(() => {
+    feedEnd.current?.scrollIntoView({ block: 'end' });
+  }, [feed]);
 
   const ids = Object.keys(board.agents);
   const pos = (id: string) => {

@@ -410,12 +410,6 @@ button.link {
 }
 
 /* Sign-in and consent */
-.google-button {
-  display: flex;
-  justify-content: center;
-  min-height: 44px;
-}
-
 .small {
   font-size: 0.85rem;
 }

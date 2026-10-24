@@ -19,27 +19,26 @@ type Status = {
   my_part: string | null; challenge: { title?: string; goal?: string } | null; consented: boolean; would_share: Shared;
 };
 
-// Google Identity Services, loaded only on the sign-in page.
-type GoogleId = {
-  initialize: (o: { client_id: string; callback: (r: { credential: string }) => void }) => void;
-  renderButton: (el: HTMLElement, o: Record<string, unknown>) => void;
-};
-declare global {
-  interface Window {
-    google?: { accounts: { id: GoogleId } };
-  }
+// Sign in with SpacetimeAuth: OpenID Connect authorization code + PKCE. The page only ever holds a one-time code;
+// the agents service trades it for the ID token and keeps just the first name.
+type AuthConfig = { spacetimeauth: { authority: string; client_id: string } | null };
+const PKCE = 'krew-signin';
+const REDIRECT = `${location.origin}/`;
+
+function b64url(bytes: Uint8Array) {
+  return btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function loadGoogle(): Promise<GoogleId> {
-  return new Promise((resolve, reject) => {
-    if (window.google) return resolve(window.google.accounts.id);
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.async = true;
-    script.onload = () => (window.google ? resolve(window.google.accounts.id) : reject(new Error('Google sign-in did not load')));
-    script.onerror = () => reject(new Error('Google sign-in did not load'));
-    document.head.appendChild(script);
+async function goSignIn(authority: string, clientId: string) {
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)));
+  const state = b64url(crypto.getRandomValues(new Uint8Array(16)));
+  const challenge = b64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
+  sessionStorage.setItem(PKCE, JSON.stringify({ verifier, state }));
+  const q = new URLSearchParams({
+    response_type: 'code', client_id: clientId, redirect_uri: REDIRECT, scope: 'openid profile',
+    code_challenge: challenge, code_challenge_method: 'S256', state,
   });
+  location.assign(`${authority}/auth?${q}`);
 }
 
 async function call<T>(base: string, path: string, body?: unknown): Promise<T> {
@@ -73,41 +72,44 @@ function title(id: string) {
   return id.charAt(0).toUpperCase() + id.slice(1);
 }
 
-const AGENT = new URLSearchParams(location.search).get('agent') ?? remembered(KEY) ?? '';
+const QUERY = new URLSearchParams(location.search);
+const AGENT = QUERY.get('agent') ?? remembered(KEY) ?? '';
 
 export default function Lobby() {
+  if (QUERY.has('code') && QUERY.has('state')) return <FinishSignIn />;
   return AGENT ? <Chat agentId={AGENT} /> : <Login />;
+}
+
+function enter(s: Status) {
+  remember(KEY, s.agent_id);
+  location.assign(`?agent=${s.agent_id}`);
+}
+
+function FinishSignIn() {
+  const [error, setError] = useState('');
+  useEffect(() => {
+    const saved = JSON.parse(sessionStorage.getItem(PKCE) ?? 'null') as { verifier: string; state: string } | null;
+    sessionStorage.removeItem(PKCE);
+    if (!saved || saved.state !== QUERY.get('state')) return setError("That sign-in link didn't come from this page. Try again.");
+    call<Status>(AGENTS, '/users/spacetime', { code: QUERY.get('code'), code_verifier: saved.verifier, redirect_uri: REDIRECT })
+      .then(enter)
+      .catch(e => setError(String(e.message)));
+  }, []);
+  return (
+    <main className="app">
+      {error ? <p className="error">{error} · <a href="/">back to sign-in</a></p> : <p className="muted">Signing you in…</p>}
+    </main>
+  );
 }
 
 function Login() {
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [googleReady, setGoogleReady] = useState<boolean | null>(null); // null = still checking
-  const button = useRef<HTMLDivElement>(null);
+  const [auth, setAuth] = useState<AuthConfig['spacetimeauth'] | undefined>(undefined); // undefined = still checking
 
-  const enter = (s: Status) => {
-    remember(KEY, s.agent_id);
-    location.assign(`?agent=${s.agent_id}`);
-  };
-
-  // Sign in with Google when the agents service has a client id; otherwise only the demo sign-in shows.
   useEffect(() => {
-    call<{ google_client_id: string | null }>(AGENTS, '/auth/config')
-      .then(async ({ google_client_id }) => {
-        if (!google_client_id) return setGoogleReady(false);
-        const id = await loadGoogle();
-        id.initialize({
-          client_id: google_client_id,
-          callback: ({ credential }) => {
-            setBusy(true);
-            call<Status>(AGENTS, '/users/google', { credential }).then(enter).catch(e => setError(String(e.message))).finally(() => setBusy(false));
-          },
-        });
-        if (button.current) id.renderButton(button.current, { theme: 'filled_blue', size: 'large', shape: 'pill', text: 'continue_with', width: 280 });
-        setGoogleReady(true);
-      })
-      .catch(() => setGoogleReady(false));
+    call<AuthConfig>(AGENTS, '/auth/config').then(c => setAuth(c.spacetimeauth)).catch(() => setAuth(null));
   }, []);
 
   const demo = (e: React.FormEvent) => {
@@ -128,18 +130,20 @@ function Login() {
         Your personal AI agent finds a small group nearby for a quick challenge. You approve every step, and nothing
         about you is shared until you say OK.
       </p>
-      <section className="card">
-        <div ref={button} className="google-button" />
-        {googleReady === null && <p className="muted">Loading sign-in…</p>}
-        {googleReady && (
+      {auth && (
+        <section className="card">
+          <button className="primary" disabled={busy} onClick={() => { setBusy(true); goSignIn(auth.authority, auth.client_id).catch(e => { setBusy(false); setError(String(e.message)); }); }}>
+            {busy ? 'Opening sign-in…' : 'Sign in'}
+          </button>
           <p className="muted small">
-            Krew keeps only your first name. Your email and photo from Google are never stored or shared.
+            Secure sign-in by SpacetimeAuth. Krew keeps only your first name; your email and photo are never stored or
+            shared.
           </p>
-        )}
-        {busy && <p className="muted">Waking up your agent…</p>}
-      </section>
-      <details className="card" open={googleReady === false}>
-        <summary className="label">No Google account? Try the demo with a first name</summary>
+        </section>
+      )}
+      {auth === undefined && <p className="muted">Loading sign-in…</p>}
+      <details className="card" open={auth === null}>
+        <summary className="label">Just trying it out? Use the demo with a first name</summary>
         <form className="stack" onSubmit={demo}>
           <input value={name} onChange={e => setName(e.target.value)} placeholder="Linh" required maxLength={40} aria-label="Your first name" />
           <p className="muted small">Your agent starts with a sample profile, like one a real personal agent would already have.</p>

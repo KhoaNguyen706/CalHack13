@@ -117,10 +117,12 @@ class Start(BaseModel):
         return v
 
 
-class GoogleLogin(BaseModel):
-    """POST /users/google: the ID token from Sign in with Google."""
+class SpacetimeLogin(BaseModel):
+    """POST /users/spacetime: the authorization code SpacetimeAuth sent the page back with."""
 
-    credential: str = Field(min_length=1, max_length=8000)
+    code: str = Field(min_length=1, max_length=2000)
+    code_verifier: str = Field(min_length=43, max_length=128)
+    redirect_uri: str = Field(min_length=1, max_length=500)
 
 
 class Consent(BaseModel):

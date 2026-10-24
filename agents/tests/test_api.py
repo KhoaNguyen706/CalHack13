@@ -274,26 +274,33 @@ def test_nothing_is_shared_until_they_tap_share(client, coord):
     assert "about" not in coord.agents["phong"] and "name" not in coord.agents["phong"]  # coarse fields only
 
 
-def test_google_sign_in_keeps_only_the_first_name(coord, tmp_path):
-    def google(request: httpx.Request) -> httpx.Response:
-        assert request.url.host == "oauth2.googleapis.com" and request.url.params["id_token"] in ("good", "other-app")
-        aud = "krew-client" if request.url.params["id_token"] == "good" else "someone-else"
-        claims = {"aud": aud, "iss": "https://accounts.google.com", "exp": str(int(time.time()) + 600), "sub": "1234",
+def test_spacetimeauth_sign_in_keeps_only_the_first_name(coord, tmp_path):
+    def token(claims):
+        enc = lambda d: base64.urlsafe_b64encode(json.dumps(d).encode()).decode().rstrip("=")
+        return f"{enc({'alg': 'RS256'})}.{enc(claims)}.sig"
+
+    def spacetimeauth(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == "https://auth.spacetimedb.com/oidc/token"
+        form = dict(x.split("=", 1) for x in request.content.decode().split("&"))
+        assert form["grant_type"] == "authorization_code" and form["code_verifier"] == "v" * 43
+        aud = "krew-client" if form["code"] == "good" else "someone-else"
+        claims = {"iss": "https://auth.spacetimedb.com/oidc", "aud": aud, "exp": int(time.time()) + 600, "sub": "u-1234",
                   "given_name": "Minh", "name": "Minh Tran", "email": "minh@example.com", "picture": "https://x/p.jpg"}
-        return httpx.Response(200, json=claims)
+        return httpx.Response(200, json={"id_token": token(claims), "access_token": "a"})
 
     settings = Settings(
         coordinator_url="http://coordinator", public_url="http://agents", db_path=":memory:", cache_dir=tmp_path,
-        use_claude=False, apify_token="", moss_project_id="", moss_project_key="", google_client_id="krew-client",
+        use_claude=False, apify_token="", moss_project_id="", moss_project_key="", spacetimeauth_client_id="krew-client",
     )
-    app = create_app(settings, coordinator_transport=httpx.MockTransport(coord), web_transport=httpx.MockTransport(google), watch=False)
+    app = create_app(settings, coordinator_transport=httpx.MockTransport(coord), web_transport=httpx.MockTransport(spacetimeauth), watch=False)
     with TestClient(app) as client:
-        assert client.get("/auth/config").json() == {"google_client_id": "krew-client"}
-        me = client.post("/users/google", json={"credential": "good"}).json()
+        assert client.get("/auth/config").json()["spacetimeauth"]["client_id"] == "krew-client"
+        body = {"code": "good", "code_verifier": "v" * 43, "redirect_uri": "https://krew.test/"}
+        me = client.post("/users/spacetime", json=body).json()
         assert me["name"] == "Minh" and me["agent_id"] == "minh" and me["context_id"] is None
         assert me["profile"]["interests"] == [] and "what are you into" in me["transcript"][0]["text"]
         stored = client.app.state.svc.store.users["minh"].model_dump_json()
         assert "minh@example.com" not in stored and "Tran" not in stored and "p.jpg" not in stored
-        assert client.post("/users/google", json={"credential": "good"}).json()["agent_id"] == "minh"  # same person
-        assert client.post("/users/google", json={"credential": "other-app"}).status_code == 401
+        assert client.post("/users/spacetime", json=body).json()["agent_id"] == "minh"  # same person, same agent
+        assert client.post("/users/spacetime", json={**body, "code": "other-app"}).status_code == 401
         assert not coord.agents  # signing in shares nothing

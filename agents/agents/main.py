@@ -14,11 +14,11 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
-from . import chat, google, llm, sponsors, timeutil
+from . import chat, llm, spacetimeauth, sponsors, timeutil
 from .config import Settings
 from .coordinator_client import CoordinatorClient, CoordinatorError
 from .memory import Memory
-from .models import Answer, ChatIn, ChatLine, Consent, Decision, GoogleLogin, Feedback, Login, PersonalContext, PhotoCheck, PhotoUpload, Question, Start
+from .models import Answer, ChatIn, ChatLine, Consent, Decision, Feedback, Login, PersonalContext, PhotoCheck, PhotoUpload, Question, SpacetimeLogin, Start
 from .place import Place, PlaceService
 from .service import AgentsService, Conflict, NotFound
 from .store import Store
@@ -119,17 +119,21 @@ def create_app(
 
     @app.get("/auth/config")
     async def auth_config() -> dict:
-        """What the sign-in page needs: the Google client id (public), or none for name-only sign-in."""
-        return {"google_client_id": s.google_client_id or None}
+        """What the sign-in page needs: SpacetimeAuth's address and our client id (public), or none for name-only."""
+        client_id = s.spacetimeauth_client_id or None
+        return {"spacetimeauth": {"authority": spacetimeauth.ISSUER, "client_id": client_id} if client_id else None}
 
-    @app.post("/users/google")
-    async def login_google(body: GoogleLogin) -> dict:
-        """Sign in with Google. Keeps the account id and first name only; email and photo are dropped here."""
+    @app.post("/users/spacetime")
+    async def login_spacetime(body: SpacetimeLogin) -> dict:
+        """Sign in with SpacetimeAuth. Keeps the account id and first name only; email and photo are dropped here."""
         try:
-            person = await google.verify(app.state.web, body.credential, s.google_client_id)
-        except google.InvalidToken as e:
+            person = await spacetimeauth.sign_in(
+                app.state.web, body.code, body.code_verifier, body.redirect_uri,
+                s.spacetimeauth_client_id, s.spacetimeauth_client_secret,
+            )
+        except spacetimeauth.InvalidSignIn as e:
             raise HTTPException(401, str(e))
-        return await svc().status(svc().login_google(person))
+        return await svc().status(svc().login_person(person))
 
     @app.post("/users/{agent_id}/consent")
     async def consent(agent_id: str, body: Consent) -> dict:

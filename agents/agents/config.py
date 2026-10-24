@@ -41,8 +41,10 @@ class Settings:
     area: str = _env("EVENT_AREA", "Palace of Fine Arts")
     tz: str = _env("EVENT_TZ", "America/Los_Angeles")
 
-    # Sign in with Google (an OAuth web client id; it's public). Unset: only the name sign-in works.
-    google_client_id: str = _env("GOOGLE_CLIENT_ID")
+    # Sign in with SpacetimeAuth: the client id from the database's SpacetimeAuth dashboard (public), plus its
+    # secret if the client is confidential. Unset: only the name sign-in works.
+    spacetimeauth_client_id: str = _env("SPACETIMEAUTH_CLIENT_ID")
+    spacetimeauth_client_secret: str = _env("SPACETIMEAUTH_CLIENT_SECRET")
     apify_token: str = _env("APIFY_TOKEN")
     moss_project_id: str = _env("MOSS_PROJECT_ID")
     moss_project_key: str = _env("MOSS_PROJECT_KEY")

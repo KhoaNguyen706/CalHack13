@@ -12,7 +12,7 @@ from . import designer, personal, timeutil, vision
 from .config import Settings
 from .coordinator_client import CoordinatorClient, CoordinatorError
 from .memory import Memory
-from .google import GoogleUser
+from .spacetimeauth import Person
 from .models import Answer, ChatLine, Feedback, Login, PersonalContext, PhotoCheck, Profile, Question, User
 from .place import PlaceService
 from .sponsors import Booth, SponsorInfo
@@ -24,7 +24,7 @@ GREETING = (
     "Hi {name}! I'm your agent. I find you a few people nearby for a quick outdoor challenge. "
     "First, check what I'd share about you on the card below. Nothing leaves until you tap Share."
 )
-# Signed in with Google: we know only their first name, so the agent asks the basics itself.
+# Signed in for real (SpacetimeAuth): we know only their first name, so the agent asks the basics itself.
 NEW_PERSON_GREETING = (
     "Hi {name}! I'm your agent. I find you a few people nearby for a quick outdoor challenge. "
     "A few quick questions so I can pick good matches: what are you into, and what are you good at?"
@@ -124,10 +124,10 @@ class AgentsService:
             return user
         return self._new_user(body.identity, body.name, self._pick_context(body.context_id))
 
-    def login_google(self, google: GoogleUser) -> User:
+    def login_person(self, person: Person) -> User:
         """A real person: no sample context. Their agent asks for interests, skills and free time in the chat."""
-        identity = f"google:{google.sub}"
-        return self.store.user_by_identity(identity) or self._new_user(identity, google.first_name, None)
+        identity = f"spacetimeauth:{person.sub}"
+        return self.store.user_by_identity(identity) or self._new_user(identity, person.first_name, None)
 
     def _new_user(self, identity: str, display_name: str, context: PersonalContext | None) -> User:
         base = slug_id(display_name)

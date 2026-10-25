@@ -5,7 +5,7 @@
 // - /?view=log (a presenter screen): everyone, from the full event stream (ws /ws/log).
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { API } from './config.ts';
-import { Buddy, CREW, Icon, Walrus, type PebbleMood, type WalrusMood } from './ui.tsx';
+import { Buddy, crewAt, Icon, Walrus, type PebbleMood, type WalrusMood } from './ui.tsx';
 
 type LogEvent = { seq: number; ts: number; kind: string; text: string; data: Record<string, any> };
 type Status = 'pool' | 'asked' | 'yes' | 'no' | 'grouped' | 'accepted' | 'here' | 'done';
@@ -192,6 +192,10 @@ export default function LiveLog() {
 
   const ids = Object.keys(board.agents);
   const label = (id: string) => labels[id] ?? title(id);
+  // Each person's animal follows the Coordinator's order (its labels come You, Agent A, B…), the same as on the group
+  // card, and stays when names show. The presenter screen has no labels: everyone in the order they arrived.
+  const order = Object.keys(labels).filter(k => k !== 'you');
+  const nth = (id: string) => (order.includes(id) ? order.indexOf(id) : ids.filter(x => x !== ME).indexOf(id));
   // Everything on the ring is placed by turning around the walrus, so when someone joins or leaves the others glide
   // round to their new spots instead of jumping.
   const angle = (id: string) => (ids.indexOf(id) / Math.max(ids.length, 1)) * 360 - 90;
@@ -232,7 +236,7 @@ export default function LiveLog() {
               <text x={MID} y={MID + 72}>Coordinator</text>
               <text x={MID} y={MID + 88} className="sub">{board.pickedBy ? `picked by ${board.pickedBy}` : 'waiting'}</text>
             </g>
-            {ids.map((id, i) => {
+            {ids.map(id => {
               const s = board.agents[id], a = angle(id);
               const mine = id === ME || label(id) === 'You';
               // On the top half the line from Wally comes in from below, so the name goes above the face.
@@ -243,7 +247,7 @@ export default function LiveLog() {
                     <circle r="27" className="ring" />
                     <g clipPath={`url(#${clip})`}>
                       <circle r="24" className="porthole" />
-                      <Buddy decorative {...(mine ? { animal: 'seal' as const } : CREW[i % CREW.length])} mood={FACE[s]} size={58} x={-29} y={-26} />
+                      <Buddy decorative {...(mine ? { animal: 'seal' as const } : crewAt(nth(id)))} mood={FACE[s]} size={58} x={-29} y={-26} />
                     </g>
                   </g>
                   <text y={up ? -51 : 46} className="name">{label(id)}</text>

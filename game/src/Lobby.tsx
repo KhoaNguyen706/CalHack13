@@ -16,7 +16,7 @@ const KEY = 'threekey-agent';
 type Line = { role: 'agent' | 'user' | 'update'; text: string };
 type Match = {
   match_id: string; members: string[]; accepted: string[]; state: string; window: string; area: string;
-  host?: string | null; size?: number | null;
+  host?: string | null; size?: number | null; invited?: string[]; declined?: string[];
 };
 type Shared = { free: string; area: string; interests: string[]; skills: string[] };
 type Status = {
@@ -254,10 +254,17 @@ function seatsFor(m: Match, me: string): Seat[] {
   const named = ['confirmed', 'playing', 'done'].includes(m.state);
   const accepted = (p: string) => m.accepted.includes(p);
   const you: Seat = accepted(me) && m.state !== 'inviting' ? { state: 'acc', name: 'You' } : { state: 'you' };
+  // The Coordinator's order (everyone it invited, then anyone seated without an invite), as on the live screen:
+  // the first of them is Agent A everywhere, with the same animal.
+  const order = [...new Set([...(m.invited ?? []), ...m.members])].filter(p => p !== me);
   const others: Seat[] = m.members
     .filter(p => p !== me)
-    .map(p => ({ state: accepted(p) ? 'acc' : 'in', name: named ? title(p) : undefined }));
-  const open: Seat[] = Array.from({ length: Math.max(0, size - m.members.length) }, () => ({ state: m.state === 'inviting' ? 'think' : 'open' }));
+    .map(p => ({ state: accepted(p) ? 'acc' : 'in', name: named ? title(p) : undefined, n: order.indexOf(p) }));
+  // Invites still out sit on the empty seats, so "asking…" carries the letter the live screen gives them.
+  const asking = order.flatMap((p, k) => (m.members.includes(p) || m.declined?.includes(p) ? [] : [k]));
+  const open: Seat[] = Array.from({ length: Math.max(0, size - m.members.length) }, (_, j) =>
+    m.state === 'inviting' ? { state: 'think', n: asking[j] } : { state: 'open' },
+  );
   return [you, ...others, ...open];
 }
 

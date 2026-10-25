@@ -369,12 +369,16 @@ const WORDS: Record<SeatState, string> = {
   you: 'You', open: 'open seat', think: 'asking…', in: 'in', time: 'checking time…', no: "can't make it", acc: 'accepted',
 };
 const FACES: Record<SeatState, PebbleMood> = { you: 'happy', open: 'happy', think: 'thinking', in: 'happy', time: 'thinking', no: 'sad', acc: 'cheer' };
-const LETTERS = ['A', 'B', 'C', 'D', 'E'];
 // Everyone else in the group is another animal from the sheet, so the drawing tells people apart without naming them.
 export const CREW: { animal: Animal; scarf?: string }[] = [{ animal: 'octopus' }, { animal: 'jelly' }, { animal: 'crab' }, { animal: 'seal', scarf: '#F9A8D4' }];
 const STEP = 54, ROW = 50; // pieces side by side once they snap, under Wally
 
-export type Seat = { state: SeatState; name?: string };
+// `n`: where this person comes in the Coordinator's order (0 = Agent A). The letter and the animal both follow it,
+// so someone looks the same on the group card, the live screen and after their name shows.
+export type Seat = { state: SeatState; name?: string; n?: number };
+
+// The animal for the nth other person, the same on every screen. You are always Pebble.
+export const crewAt = (n: number) => CREW[Math.max(0, n) % CREW.length];
 
 // The badge on a piece: ✓ in / accepted, clock for checking time, minus for can't make it.
 function Badge({ state }: { state: SeatState }) {
@@ -407,13 +411,15 @@ export function Seats({ seats, mood = 'happy', tight = false, snap = false }: { 
   const clip = useId();
   const n = seats.length;
   const rx = tight ? 104 : 128, ry = tight ? 72 : 86;
-  let other = 0;
+  // Seats without a place in the order (an open seat) take the next letters after everyone who has one.
+  let other = Math.max(-1, ...seats.map(s => s.n ?? -1)) + 1;
   const placed = seats.map((seat, i) => {
     const a = ((90 + (i * 360) / n) * Math.PI) / 180;
     const x = Math.round(rx * Math.cos(a)), y = Math.round(ry * Math.sin(a));
     const cx = Math.round(x / 2 - y * 0.2), cy = Math.round(y / 2 + x * 0.2);
     const me = seat.state === 'you' || seat.name === 'You';
-    const display = me ? 'You' : seat.name || LETTERS[other++];
+    const k = me ? 0 : seat.n ?? other++;
+    const display = me ? 'You' : seat.name || String.fromCharCode(65 + k); // A, B, C… as the Coordinator letters them
     // Points along the curve (t = ¼, ½, ¾, 1) for messages to travel on; the curve itself is a quadratic from the walrus.
     const at = (t: number) => [Math.round(2 * (1 - t) * t * cx + t * t * x), Math.round(2 * (1 - t) * t * cy + t * t * y)];
     const path: Record<string, string> = {};
@@ -427,7 +433,7 @@ export function Seats({ seats, mood = 'happy', tight = false, snap = false }: { 
       seat, x, y, display, me, rot, path,
       // Snapped: side by side, tab to the left so each piece plugs into the one before it.
       row: { x: Math.round((i - (n - 1) / 2) * STEP), y: ROW, rot: rot >= 0 ? 180 : -180 },
-      who: me ? { animal: 'seal' as Animal } : CREW[(i - 1 + CREW.length) % CREW.length],
+      who: me ? { animal: 'seal' as Animal } : crewAt(k),
       line: `M 0 0 Q ${cx} ${cy} ${x} ${y}`,
       // A second, lighter pass of the pen, a little off the first: lines look drawn, not plotted.
       sketch: `M 2 1 Q ${cx + 5} ${cy - 4} ${x - 1} ${y + 2}`,

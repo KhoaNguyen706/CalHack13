@@ -42,6 +42,31 @@ The team landed here after 15 decisions, from a finance agent to a people-connec
 
 All agents go through one Python coordinator; agents never talk to each other directly. Only the challenge designer and the agents use an LLM — matching is plain code.
 
+**The picture to draw:** four boxes and six arrows, with no lines crossing.
+
+```
+     ┌─────────────────────────────────────────────────────────────────────┐
+     │                           Phone (web app)                           │
+     │                      Chat · Flow · Game · Done                      │
+     └────┬─────────────────────────────┬─────────────────────────────┬────┘
+          │ chat                        │ Flow feed                   │ game board
+          ▼                             ▼                             ▼
+┌──────────────────┐          ┌──────────────────┐          ┌──────────────────┐
+│      Agents      │          │   Coordinator    │          │   SpacetimeDB    │
+│                  │ check in │    (the hub)     │ start    │                  │
+│    your agent    │◀────────▶│  invite · match  │─────────▶│    live game     │
+│ challenge maker  │ invites  │     approve      │ a round  │   shared board   │
+│   photo check    │          │ negotiation log  │          │                  │
+└─────────┬────────┘          └──────────────────┘          └──────────────────┘
+          ▼
+Claude · Apify · Moss
+```
+
+- **Draw the Coordinator in the middle.** It is the only box the agents talk to; never draw a line between two agents.
+- **The phone talks to three boxes:** its agent (chat), the coordinator (the Flow feed) and SpacetimeDB (the live game).
+- **Keep the parts inside their box.** Gateway, broker, matching, approval and the log are all the Coordinator; the
+  table below lists each one.
+
 | Component | Tech | Responsibility |
 | --- | --- | --- |
 | Personal agents | Claude + Moss memory | LLM + persona info. 15–20 seeded personas, plus real users via web chat. |

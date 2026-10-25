@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from . import chat, designer, llm, spacetimeauth, sponsors, timeutil
 from .config import Settings
 from .coordinator_client import CoordinatorClient, CoordinatorError
+from .geo import GeoService
 from .memory import Memory
 from .mirror import Mirror
 from .models import Answer, ChatIn, ChatLine, Consent, Decision, DemoLogin, Feedback, Login, PersonalContext, PhotoCheck, PhotoUpload, Question, SpacetimeLogin, Start
@@ -66,7 +67,7 @@ def create_app(
             svc = AgentsService(
                 s, store, memory, CoordinatorClient(coord_http), claude_client, place, load_contexts(),
                 sponsors.load_booths(), sponsors.load_sponsors(), load_contexts(DEMO_PEOPLE),
-                designer.load_spots(), designer.load_poses(), pose_search,
+                designer.load_spots(), designer.load_poses(), pose_search, GeoService(s, web),
             )
             app.state.svc = svc
             app.state.web = web

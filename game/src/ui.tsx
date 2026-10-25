@@ -593,13 +593,37 @@ export function Reconnecting({ offline, onRetry }: { offline: boolean; onRetry: 
   );
 }
 
-// Where a new group meets first, and the sign that lets strangers find each other in a crowd.
-export type Meet = { spot: string; sign: string; emoji: string; color: string };
+// Where a new group meets first, and the sign that lets strangers find each other in a crowd. `address`, `lat`
+// and `lng` place it on a map (lat/lng are missing when the agents service couldn't look the place up).
+export type Meet = { spot: string; sign: string; emoji: string; color: string; address?: string; lat?: number | null; lng?: number | null };
+
+// Directions in the phone's own map app: Apple Maps on iPhone/iPad, the map-app picker on Android (geo:), Google
+// Maps in a desktop browser. Coordinates when we have them, else the address text.
+export function directionsUrl(meet: Meet) {
+  const pin = meet.lat != null && meet.lng != null ? `${meet.lat},${meet.lng}` : '';
+  const where = encodeURIComponent(meet.address || meet.spot);
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) {
+    return `https://maps.apple.com/?daddr=${pin || where}&q=${where}`;
+  }
+  if (/Android/.test(ua)) return pin ? `geo:${pin}?q=${pin}(${where})` : `geo:0,0?q=${where}`;
+  return `https://www.google.com/maps/dir/?api=1&destination=${pin || where}`;
+}
+
+// A small OpenStreetMap with a pin (their official embed: no key). Pan and zoom right in the card.
+function MeetMap({ lat, lng, label }: { lat: number; lng: number; label: string }) {
+  const d = 0.004; // about 400 m each way: the venue and the streets around it
+  const src = `https://www.openstreetmap.org/export/embed.html?bbox=${lng - d},${lat - d},${lng + d},${lat + d}&layer=mapnik&marker=${lat},${lng}`;
+  return <iframe className="meet-map" src={src} title={`Map of ${label}`} loading="lazy" referrerPolicy="no-referrer" />;
+}
 
 export function MeetCard({ meet, onShow }: { meet: Meet; onShow: () => void }) {
+  const directions = directionsUrl(meet);
   return (
     <section className="card meet">
       <CardHead eyebrow="Meet here first" title={meet.spot} />
+      {meet.address && <p className="meet-address"><Icon name="pin" size={16} /><span>{meet.address}</span></p>}
+      {meet.lat != null && meet.lng != null && <MeetMap lat={meet.lat} lng={meet.lng} label={meet.address || meet.spot} />}
       <div className="sign-row">
         <span className="sign-chip" style={{ background: meet.color }}>{meet.emoji}</span>
         <div>
@@ -607,7 +631,12 @@ export function MeetCard({ meet, onShow }: { meet: Meet; onShow: () => void }) {
           <span>Your group's sign. Look for phones showing it, and hold yours up too.</span>
         </div>
       </div>
-      <button className="btn primary" onClick={onShow}>Show my sign</button>
+      <div className="btn-row">
+        <a className="btn" href={directions} target={directions.startsWith('http') ? '_blank' : undefined} rel="noopener">
+          <Icon name="pin" size={18} />Directions
+        </a>
+        <button className="btn primary wide" onClick={onShow}>Show my sign</button>
+      </div>
     </section>
   );
 }

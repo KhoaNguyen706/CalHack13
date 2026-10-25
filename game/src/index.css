@@ -805,6 +805,12 @@ summary:focus-visible {
   flex: 1.5;
 }
 
+/* Two or three buttons share a phone's width: less side padding, so labels stay on one line. */
+.btn-row > .btn {
+  padding: 0 12px;
+  white-space: nowrap;
+}
+
 .link {
   border: 0;
   padding: 0;
@@ -1840,6 +1846,29 @@ details[open].card summary::after {
 /* Spots read "the rotunda steps…" mid-sentence; as a heading they start with a capital. */
 .meet h2::first-letter {
   text-transform: uppercase;
+}
+
+.meet-address {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: -4px;
+  font-size: 15px;
+  color: var(--muted);
+}
+
+.meet-address svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--accent-text);
+}
+
+.meet-map {
+  width: 100%;
+  height: 160px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--field);
 }
 
 .sign-row {

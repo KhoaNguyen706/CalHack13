@@ -193,3 +193,29 @@ def test_the_chat_agent_never_sees_the_spot():
     svc = SimpleNamespace(status=get_status, display=lambda a: a.title())
     out = json.loads(asyncio.run(chat._my_challenge(svc, None, {})))
     assert out["challenge"] == {"title": "Spot & Pose"} and out["my_part"] == "It has a huge dome on top."
+
+
+def test_geo_lookup_caches_and_survives_failure(tmp_path):
+    import httpx
+
+    from agents.config import Settings
+    from agents.geo import GeoService, parse_coords
+
+    assert parse_coords("37.8, -122.4") == (37.8, -122.4)
+    assert parse_coords("north of the lagoon") is None and parse_coords("91,0") is None
+
+    calls = []
+
+    def web(request):
+        calls.append(request)
+        return httpx.Response(503)
+
+    async def where():
+        async with httpx.AsyncClient(transport=httpx.MockTransport(web)) as http:
+            return await GeoService(Settings(cache_dir=tmp_path), http).where()
+
+    # The lookup fails: the address text still opens in a map app, there's just no pin.
+    assert asyncio.run(where()) == {"address": "Palace of Fine Arts, San Francisco", "lat": None, "lng": None}
+    (tmp_path / "geo.json").write_text('{"query": "Palace of Fine Arts, San Francisco", "address": "3601 Lyon St", "lat": 1.0, "lng": 2.0}')
+    assert asyncio.run(where()) == {"address": "3601 Lyon St", "lat": 1.0, "lng": 2.0}  # from the cache
+    assert len(calls) == 1  # the cached run didn't call OpenStreetMap

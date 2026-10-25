@@ -49,6 +49,10 @@ class Settings:
     # Where every new group meets first, e.g. "the rotunda steps, facing the lagoon". Unset: Claude picks a spot
     # from the place facts and booths, else the venue's main entrance.
     meeting_point: str = _env("MEETING_POINT")
+    # Its place on the map, for the in-app map and "Directions". Unset: the venue (EVENT_LOCATION, EVENT_CITY) looked up
+    # on OpenStreetMap. COORDS is "lat,lng", e.g. "37.8029,-122.4484"; ADDRESS is a street address.
+    meeting_point_address: str = _env("MEETING_POINT_ADDRESS")
+    meeting_point_coords: str = _env("MEETING_POINT_COORDS")
 
     # Sign in with SpacetimeAuth: the client id from the database's SpacetimeAuth dashboard (public), plus its
     # secret if the client is confidential. Unset: only the name sign-in works.

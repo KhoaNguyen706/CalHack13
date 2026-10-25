@@ -11,6 +11,7 @@ import anthropic
 from . import designer, personal, timeutil, vision
 from .config import Settings
 from .coordinator_client import CoordinatorClient, CoordinatorError
+from .geo import GeoService
 from .memory import Memory
 from .spacetimeauth import Person
 from .models import Answer, ChatLine, Feedback, Login, PersonalContext, PhotoCheck, Profile, Question, User
@@ -102,8 +103,10 @@ class AgentsService:
         spots: list[designer.Spot] | None = None,
         poses: list[designer.Pose] | None = None,
         pose_search: PoseSearch | None = None,
+        geo: GeoService | None = None,
     ):
         self.s = settings
+        self.geo = geo
         self.store = store
         self.memory = memory
         self.coordinator = coordinator
@@ -448,6 +451,8 @@ class AgentsService:
         )
         challenge["round"]["designed_by"] = how
         challenge["round"]["event"] = place.event  # for the Story card at the end
+        if self.geo and (meet := challenge["round"].get("meet")):
+            meet.update(await self.geo.where())  # address + lat/lng for the map and "Directions"
         log.info("designed %r for %s via %s", challenge["round"]["title"], challenge["group"], how)
         return challenge
 

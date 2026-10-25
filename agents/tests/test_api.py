@@ -69,12 +69,26 @@ def coord():
     return FakeCoordinator()
 
 
+VENUE = {
+    "lat": "37.8029", "lon": "-122.4484", "name": "Palace of Fine Arts", "display_name": "Palace of Fine Arts, San Francisco",
+    "address": {"house_number": "3601", "road": "Lyon Street", "city": "San Francisco", "state": "California", "postcode": "94123"},
+}
+
+
+def fake_web(request: httpx.Request) -> httpx.Response:
+    """The outside web in tests: OpenStreetMap's lookup finds the venue; nothing else is reachable."""
+    if request.url.host == "nominatim.openstreetmap.org":
+        return httpx.Response(200, json=[VENUE])
+    return httpx.Response(404)
+
+
 def make_client(coord, tmp_path, **overrides):
     settings = Settings(
         coordinator_url="http://coordinator", public_url="http://agents", db_path=":memory:", cache_dir=tmp_path,
         use_claude=False, apify_token="", moss_project_id="", moss_project_key="", watch_every_s=0.05, **overrides,
     )
-    return TestClient(create_app(settings, coordinator_transport=httpx.MockTransport(coord), watch=False))
+    app = create_app(settings, coordinator_transport=httpx.MockTransport(coord), web_transport=httpx.MockTransport(fake_web), watch=False)
+    return TestClient(app)
 
 
 @pytest.fixture
@@ -345,3 +359,24 @@ def test_a_too_long_rating_makes_the_next_challenge_shorter(client, coord):
     rnd = client.post("/challenge", json={"match": {"match_id": "m2"}, "members": members}).json()["round"]
     assert rnd["timer_min"] == 10
     assert rnd["tuned"] == {"phong": "Kept it to 10 minutes, since your last one ran long."}  # only Phong hears it
+
+
+def test_meeting_point_comes_with_an_address_and_a_map_pin(client, coord):
+    login(client)
+    login(client, "Jess", "id-jess")
+    match = coord.invite("phong", ["jess"], size=2)
+    members = [{"agent_id": a, "interests": [], "skills": []} for a in ("phong", "jess")]
+    meet = client.post("/challenge", json={"match": match, "members": members}).json()["round"]["meet"]
+    assert meet["address"] == "Palace of Fine Arts, 3601 Lyon Street, San Francisco, California 94123"
+    assert (meet["lat"], meet["lng"]) == (37.8029, -122.4484)
+    assert meet["spot"] and meet["sign"]  # still the spot to meet at and the group's sign
+
+
+def test_organizers_pin_beats_the_lookup(coord, tmp_path):
+    with make_client(coord, tmp_path, meeting_point_coords="37.80,-122.45", meeting_point_address="Lyon St & Bay St") as c:
+        login(c)
+        login(c, "Jess", "id-jess")
+        match = coord.invite("phong", ["jess"], size=2)
+        members = [{"agent_id": a, "interests": [], "skills": []} for a in ("phong", "jess")]
+        meet = c.post("/challenge", json={"match": match, "members": members}).json()["round"]["meet"]
+    assert (meet["address"], meet["lat"], meet["lng"]) == ("Lyon St & Bay St", 37.80, -122.45)

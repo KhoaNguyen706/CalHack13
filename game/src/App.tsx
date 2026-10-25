@@ -39,6 +39,7 @@ type View = {
     shared?: Record<string, string> | null; // agent_id -> the hint of someone who left
     spot_name?: string | null; // shown once everyone has tapped We're here, to confirm the spot
     spot_about?: string | null;
+    event?: string | null;
   } | null;
 };
 type Summary = { waiting_for: string[]; mutual_meet_again: boolean; my_matches: string[]; share_ok: boolean };
@@ -434,7 +435,7 @@ export default function App() {
             </>
           )}
         </section>
-        <EndScreen photoUrl={photos[0]?.url} />
+        <EndScreen photoUrl={photos[0]?.url} poseUrl={pose ? imageUrl(pose.image) : undefined} answer={round.answer} event={challenge?.event ?? undefined} />
         {error && <p className="error">{error}</p>}
       </Shell>
     );
@@ -568,9 +569,167 @@ function Celebrate() {
 // Pebble's face follows your stars while you pick them.
 const FACE_FOR_RATING: PebbleMood[] = ['happy', 'sad', 'oops', 'happy', 'cheer', 'love'];
 
+// iPhones save to Photos only from the share sheet ("Save Image"); a download goes to Files instead.
+const IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+// For drawing into a canvas: CORS, and a URL of its own so a copy cached without CORS can't taint the canvas.
+async function loadImage(url: string) {
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.src = url + (url.includes('?') ? '&' : '?') + 'canvas=1';
+  await img.decode();
+  return img;
+}
+
+function wrap(ctx: CanvasRenderingContext2D, text: string, width: number) {
+  const lines: string[] = [];
+  for (const word of text.split(' ')) {
+    const last = lines[lines.length - 1];
+    if (last !== undefined && ctx.measureText(`${last} ${word}`).width <= width) lines[lines.length - 1] = `${last} ${word}`;
+    else lines.push(word);
+  }
+  return lines;
+}
+
+// A photo printed on cream paper, tilted, centered on (x, y) and fitting w by h.
+function printed(ctx: CanvasRenderingContext2D, img: HTMLImageElement, x: number, y: number, w: number, h: number, degrees: number) {
+  const scale = Math.min(w / img.naturalWidth, h / img.naturalHeight);
+  const iw = img.naturalWidth * scale;
+  const ih = img.naturalHeight * scale;
+  const pad = 22;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate((degrees * Math.PI) / 180);
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+  ctx.shadowBlur = 40;
+  ctx.shadowOffsetY = 16;
+  ctx.fillStyle = '#fbf8f1';
+  ctx.fillRect(-iw / 2 - pad, -ih / 2 - pad, iw + 2 * pad, ih + 2 * pad + 36);
+  ctx.shadowColor = 'transparent';
+  ctx.drawImage(img, -iw / 2, -ih / 2, iw, ih);
+  ctx.restore();
+}
+
+// The Story card (1080 x 1920, Instagram's size): the group photo, the meme they recreated, and what it was.
+async function storyCard(photoUrl: string, poseUrl: string | undefined, answer: string | undefined, event: string | undefined) {
+  await Promise.all(['700 80px Caveat', '700 64px Fredoka', '700 40px Nunito'].map(f => document.fonts.load(f).catch(() => [])));
+  const photo = await loadImage(photoUrl);
+  const meme = poseUrl ? await loadImage(poseUrl).catch(() => null) : null; // a host without CORS: no meme
+  const [spot, poseName] = (answer ?? '').split(' · ');
+  const W = 1080;
+  const H = 1920;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#12403a');
+  bg.addColorStop(1, '#07070a');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#2dd4bf';
+  ctx.font = '700 88px Caveat';
+  ctx.fillText('Spot & Pose', W / 2, 170);
+
+  printed(ctx, photo, W / 2, 720, 860, 820, -2);
+  if (meme) {
+    printed(ctx, meme, W - 250, 1330, 380, 280, 5);
+    ctx.save(); // its label, to the left of it and below the group photo
+    ctx.translate(W - 470, 1350);
+    ctx.rotate((-6 * Math.PI) / 180);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#fbf8f1';
+    ctx.font = '700 58px Caveat';
+    ctx.fillText('the original →', 0, 0);
+    ctx.restore();
+  }
+
+  let y = meme ? 1600 : 1460;
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '700 68px Fredoka';
+  for (const line of wrap(ctx, poseName || 'We did it!', 900)) {
+    ctx.fillText(line, 90, y);
+    y += 78;
+  }
+  ctx.fillStyle = '#d4d4d8';
+  ctx.font = '700 44px Nunito';
+  if (spot) {
+    for (const line of wrap(ctx, `at ${spot}`, 900)) {
+      ctx.fillText(line, 90, y);
+      y += 56;
+    }
+  }
+  ctx.fillStyle = '#2dd4bf';
+  ctx.font = '700 38px Nunito';
+  ctx.fillText(event ? `${event} · made with Krew` : 'Made with Krew', 90, H - 110);
+  return new Promise<Blob>((ok, fail) => canvas.toBlob(b => (b ? ok(b) : fail(new Error('no image'))), 'image/jpeg', 0.9));
+}
+
+function download(file: File) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(file);
+  a.download = file.name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10_000);
+}
+
+// Through the phone's share sheet (Instagram there offers Stories); where sharing files isn't possible, a download.
+async function shareFile(file: File) {
+  try {
+    if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file] });
+    else download(file);
+  } catch {
+    // closing the share sheet isn't an error
+  }
+}
+
+// Once everyone said OK: the Story card to share, and the plain photo to keep. Both are ready before the tap, since
+// phones only open the share sheet straight from one.
+function SharePhoto({ photoUrl, poseUrl, answer, event }: { photoUrl: string; poseUrl?: string; answer?: string; event?: string }) {
+  const [card, setCard] = useState<File>();
+  const [photo, setPhoto] = useState<File>();
+  const [preview, setPreview] = useState<string>();
+
+  useEffect(() => {
+    let live = true;
+    let url = '';
+    storyCard(photoUrl, poseUrl, answer, event)
+      .then(blob => {
+        if (!live) return;
+        url = URL.createObjectURL(blob);
+        setPreview(url);
+        setCard(new File([blob], 'krew-story.jpg', { type: 'image/jpeg' }));
+      })
+      .catch(() => {});
+    fetch(photoUrl)
+      .then(r => r.blob())
+      .then(b => live && setPhoto(new File([b], 'krew-group-photo.jpg', { type: b.type || 'image/jpeg' })))
+      .catch(() => {});
+    return () => {
+      live = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [photoUrl, poseUrl, answer, event]);
+
+  const save = (file: File) => (IOS && navigator.canShare?.({ files: [file] }) ? shareFile(file) : download(file));
+
+  return (
+    <div className="share">
+      {preview ? <img className="story-preview" src={preview} alt="Your Story card" /> : <p className="muted small">Making your Story card…</p>}
+      <button className="btn primary" disabled={!card} onClick={() => card && shareFile(card)}>Share to your Story</button>
+      <button className="btn" disabled={!photo} onClick={() => photo && save(photo)}>Save the photo</button>
+      {IOS && <p className="muted small">On iPhone, pick Save Image to keep it in Photos.</p>}
+    </div>
+  );
+}
+
 // Rating, meet again? and OK to share the photo? Ratings stay private; a "meet again" match shows only when both
 // said yes; the photo can be shared only once everyone said OK.
-function EndScreen({ photoUrl }: { photoUrl?: string }) {
+function EndScreen({ photoUrl, poseUrl, answer, event }: { photoUrl?: string; poseUrl?: string; answer?: string; event?: string }) {
   const [rating, setRating] = useState(0);
   const [again, setAgain] = useState<boolean | null>(null);
   const [share, setShare] = useState<boolean | null>(null);
@@ -598,16 +757,6 @@ function EndScreen({ photoUrl }: { photoUrl?: string }) {
       .then(setSummary)
       .catch(e => setError(String(e.message)));
 
-  const sharePhoto = async () => {
-    if (!photoUrl) return;
-    try {
-      if (navigator.share) await navigator.share({ title: 'Krew', text: 'We did a Krew challenge!', url: photoUrl });
-      else window.open(photoUrl, '_blank');
-    } catch {
-      // closing the share sheet isn't an error
-    }
-  };
-
   if (summary && answered) {
     const mine = summary.my_matches;
     return (
@@ -626,8 +775,8 @@ function EndScreen({ photoUrl }: { photoUrl?: string }) {
           <p className="muted">Your answers stay private. If someone you'd meet again says yes too, you'll see it here.</p>
         )}
         {summary.waiting_for.length > 0 && <p className="muted small">Waiting for {summary.waiting_for.length} more to answer.</p>}
-        {summary.share_ok ? (
-          <button className="btn primary" onClick={sharePhoto}>Share the group photo</button>
+        {summary.share_ok && photoUrl ? (
+          <SharePhoto photoUrl={photoUrl} poseUrl={poseUrl} answer={answer} event={event} />
         ) : (
           <p className="note"><Icon name="lock" size={16} /><span>The photo is only shared when everyone says yes. Nobody is told who said no.</span></p>
         )}

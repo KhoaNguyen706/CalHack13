@@ -80,7 +80,7 @@ def public_round(rnd: dict) -> dict:
     hidden until everyone has tapped We're here."""
     keys = (
         "type", "title", "goal", "pose", "pieces", "shared", "reference_photo", "timer_min", "unlock", "meet",
-        "spot_name", "spot_about",
+        "spot_name", "spot_about", "event",
     )
     steps = [{"id": s["id"], "task": s["task"]} for s in rnd.get("steps") or []]
     return {**{k: rnd.get(k) for k in keys}, "steps": steps}
@@ -447,6 +447,7 @@ class AgentsService:
             self.spots, poses, match_id, self.s.meeting_point,
         )
         challenge["round"]["designed_by"] = how
+        challenge["round"]["event"] = place.event  # for the Story card at the end
         log.info("designed %r for %s via %s", challenge["round"]["title"], challenge["group"], how)
         return challenge
 

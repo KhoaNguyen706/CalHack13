@@ -1567,6 +1567,20 @@ details[open].card summary::after {
   animation: arrive 500ms var(--ease) both;
 }
 
+/* Sharing at the end: the Story card's preview, then share and save */
+.share {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.story-preview {
+  align-self: center;
+  width: min(62%, 240px);
+  border-radius: 14px;
+  box-shadow: 3px 5px 0 var(--shadow);
+}
+
 /* The group photo camera: full screen, live view with one space per person */
 .camera {
   position: fixed;

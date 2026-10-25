@@ -214,6 +214,7 @@ def test_challenge_status_and_photo_checks(client, coord):
     assert view["members"] == [{"agent_id": "phong", "name": "Phong"}, {"agent_id": "jess", "name": "Jess"}]
     assert view["challenge"]["pose"] == rnd["pose"] and not {"keys", "answer", "spot"} & set(view["challenge"])
     assert view["challenge"]["spot_name"] == rnd["spot_name"]  # the page shows it once everyone's there
+    assert view["challenge"]["event"] == "Cal Hacks 13"  # for the Story card
 
     photo = {"agent_id": "jess", "image_url": "https://example.com/photo.jpg"}
     assert client.post("/challenges/m1/check", json={**photo, "step": "s9"}).status_code == 404

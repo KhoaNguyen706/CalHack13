@@ -34,11 +34,18 @@
       "clockwork labs",
       "clockwork"
     ],
-    "verified": false,
+    "verified": true,
     "hint": "This sponsor's database is also the server, so every player sees changes live.",
     "question": "Ask them: what's the biggest multiplayer world running on it?",
     "area": "Palace of Fine Arts",
-    "location": "by the registration desk"
+    "location": "under a pillar with a red hose and an arrow on it, and the people there wear neon green",
+    "hints": [
+      "Look for people wearing neon green.",
+      "Their table is right under a pillar.",
+      "There's a red hose on that pillar.",
+      "An arrow is on the pillar too.",
+      "It's a sponsor booth, and their database is running this game right now."
+    ]
   },
   {
     "id": "cartesia_booth",

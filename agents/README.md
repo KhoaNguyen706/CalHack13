@@ -61,6 +61,7 @@ coordinator without that route, it falls back to `/matching/run`.
 | `EVENT_AREA` | `Palace of Fine Arts` | Area every agent checks in with. The coordinator only groups one area. |
 | `EVENT_TZ` | `America/Los_Angeles` | "Free from now" windows and `shift_to_now`. |
 | `MEETING_POINT` | none | Where every new group meets first, e.g. `the rotunda steps, facing the lagoon`. Unset: Claude picks a spot from the place facts and verified booths, else the venue's main entrance. |
+| `CHALLENGE_THEME` | none (both) | Where challenges send groups: `calhacks` (verified sponsor booths, hints with a little event flavor) or `general` (the venue's landmarks from `data/spots.json`, plain hints: works at any place). |
 | `MEETING_POINT_COORDS`, `MEETING_POINT_ADDRESS` | none | The meeting point's pin (`37.8029,-122.4484`) and street address, for the map and Directions in the meeting card. Unset: the venue (`EVENT_LOCATION`, `EVENT_CITY`) is looked up once on OpenStreetMap and cached. |
 | `AGENT_MODEL`, `DESIGNER_MODEL` | `claude-opus-5-5` | Agents and chat; the challenge designer. |
 | `AGENTS_WITH_CLAUDE` (or `AGENT_WITH_CLAUDE`) | `1` | `0` forces rule decisions and the built-in challenge (rehearsals). |
@@ -138,7 +139,8 @@ group size). The first agents service's paths still work: `GET /personas`, `POST
 ### Before the demo
 
 - Walk the venue and fix each booth's `location` in `data/booths.json`, then set `"verified": true`. Only Apify
-  ("near the snacks") is confirmed; the Anthropic, SpacetimeDB and Cartesia locations are placeholders.
+  ("near the snacks") and SpacetimeDB (under a pillar with a red hose) are confirmed; the Anthropic and Cartesia
+  locations are placeholders.
 - `data/sponsors.json` is hand-written for now.
 - Set `MOSS_INDEX` to a fresh name.
 

@@ -119,17 +119,20 @@ class AgentsService:
         # (the others are placeholders).
         here = settings.area.strip().casefold()
         info = sponsors or {}
-        self.spots = [s for s in spots or [] if s.area.strip().casefold() == here] + [
+        landmarks = [s for s in spots or [] if s.area.strip().casefold() == here]
+        booth_spots = [
             designer.Spot(
                 id=b.id, name=f"the {b.sponsor} booth", area=b.area, giveaways=sorted(b.giveaways),
                 about=f"{info[b.sponsor].what_it_does if b.sponsor in info else b.hint} The booth is {b.location}.",
                 check=f"a {b.sponsor} sponsor booth, banner or sign",
+                hints=b.hints or [b.hint, f"It's {b.location}.", "It's one of the sponsor booths."],
             )
             for b in booths or []
             if b.verified and b.area.strip().casefold() == here
         ]
-        if settings.demo_spot:  # a live demo sends every group to one spot, if it's known here
-            self.spots = [s for s in self.spots if s.id == settings.demo_spot] or self.spots
+        # CHALLENGE_THEME picks one kind; a theme with no spots here (or none set) uses them all.
+        themed = {"calhacks": booth_spots, "general": landmarks}.get(settings.theme)
+        self.spots = themed or landmarks + booth_spots
         self.poses = poses or []  # hand-picked; pose_search finds fresh ones with Apify
         self.pose_search = pose_search
         self._stand_in_free: dict[str, str] = {}  # the window each stand-in last checked in with
@@ -449,7 +452,7 @@ class AgentsService:
         poses = self.pose_search.poses_for(len(players), self.poses) if self.pose_search else self.poses
         challenge, how = await designer.design(
             self.claude, self.s.designer_model, self.s.design_budget_s, players, place, f"{now:%A}, {now.hour % 12 or 12}:{now:%M %p}",
-            self.spots, poses, match_id, self.s.meeting_point,
+            self.spots, poses, match_id, self.s.meeting_point, flavor=self.s.theme != "general",
         )
         challenge["round"]["designed_by"] = how
         challenge["round"]["event"] = place.event  # for the Story card at the end

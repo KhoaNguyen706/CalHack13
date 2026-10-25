@@ -57,7 +57,7 @@ Every player gets one hint about one spot nearby (`spot`). They share their hint
 Write `hints`: exactly one per player (by agent_id). Each is one short, plain sentence anyone gets at a glance, under \
 12 words, like "It has a huge dome on top." or "Ducks swim there." Every hint gives a different clue, and together \
 they make it easy to tell where to go. Never use the spot's name or its `giveaways`. Use what's true about it \
-(`about`, `facts_about_the_place`).
+(`about`, `facts_about_the_place`).{flavor}
 
 Also pick `meeting_point`: where they meet first, before the hints. One exact, easy-to-find public spot within a \
 2-minute walk (a named entrance, landmark or statue), never a vague area ("near the lawn"), and never the spot \
@@ -228,9 +228,11 @@ async def design(
     poses: list[Pose],
     match_id: str = "",
     meeting_point: str = "",
+    flavor: bool = True,
 ) -> tuple[dict, str]:
     """players: [{agent_id, name, interests, skills, past_challenges}]. meeting_point: an organizer's pick
-    (MEETING_POINT); it beats Claude's. Returns (challenge, how) where how says who wrote it."""
+    (MEETING_POINT); it beats Claude's. flavor: hints with a little of the event in them (off for the general theme).
+    Returns (challenge, how) where how says who wrote it."""
     ids = [p["agent_id"] for p in players]
     default = meeting_point or f"the main entrance of the {place.location}"
     if claude is None or not ids:
@@ -239,7 +241,13 @@ async def design(
     rng = random.Random(match_id or "x")
     spot = rng.choice([s for s in spots if not reveals(default, s)] or spots)  # never meet at the answer
     pose = rng.choice(fitting(poses, len(ids)))
-    system = SYSTEM.format(n=len(ids), event=place.event, location=place.location, city=place.city, time=when)
+    themed = (
+        f" Give them a little {place.event} flavor where it's true (the hackers, the sponsors, the venue), without "
+        "making them any harder."
+    )
+    system = SYSTEM.format(
+        n=len(ids), event=place.event, location=place.location, city=place.city, time=when, flavor=themed if flavor else ""
+    )
     content = json.dumps(
         {
             "players": players,

@@ -147,3 +147,27 @@ def test_claude_picks_the_spot_and_checks_the_photo(setup):
     assert claude.requests[-1]["messages"][0]["content"][3]["source"]["type"] == "base64" and out["passed"]
     out = client.post("/challenges/m1/check", json={"step": "photo", "image_url": "https://photos.example/page.html"}).json()
     assert not out["passed"] and "couldn't open" in out["reason"]
+
+
+@pytest.mark.parametrize(
+    "theme, spots, flavored",
+    [("calhacks", {"spacetime_booth", "apify_booth"}, True), ("general", {"weeping_ladies", "rotunda", "lagoon"}, False)],
+)
+def test_theme_picks_the_spots_and_the_flavor(tmp_path, theme, spots, flavored):
+    coord = FakeCoordinator()
+    claude = FakeClaude(turns=[], parsed={Hints: Hints(hints=[Hint(agent_id=a, hint=h) for a, h in HINTS.items()])})
+    settings = Settings(
+        coordinator_url="http://coordinator", public_url="http://agents", db_path=":memory:", cache_dir=tmp_path,
+        use_claude=False, apify_token="", moss_project_id="", moss_project_key="", theme=theme,
+    )
+    app = create_app(
+        settings, claude=claude, coordinator_transport=httpx.MockTransport(coord), web_transport=httpx.MockTransport(web), watch=False
+    )
+    with TestClient(app) as client:
+        svc = client.app.state.svc
+        assert {s.id for s in svc.spots} == spots
+        assert all(len(s.hints) >= 3 for s in svc.spots)  # booths get hand-written hints for the fallback too
+        members = [{"agent_id": "phong"}, {"agent_id": "jess"}]
+        rnd = client.post("/challenge", json={"match": {"match_id": "m1"}, "members": members}).json()["round"]
+        assert rnd["spot"] in spots
+        assert ("flavor where it's true" in claude.requests[-1]["system"]) == flavored

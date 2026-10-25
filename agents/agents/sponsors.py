@@ -19,6 +19,8 @@ class Booth(BaseModel):
     # Hand-written fallback keys.
     hint: str
     question: str
+    # Hand-written hints for the booth as a spot, one per player. Empty: made from `hint` and `location`.
+    hints: list[str] = []
 
     @property
     def giveaways(self) -> set[str]:

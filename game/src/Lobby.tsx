@@ -275,6 +275,7 @@ function Chat({ agentId }: { agentId: string }) {
   const [error, setError] = useState('');
   const [lost, setLost] = useState(false); // polling the agent failed
   const [tab, setTab] = useState<'chat' | 'flow'>('chat');
+  const [chatOpen, setChatOpen] = useState(false); // the chat, opened over "OK to share?"
   const [menu, setMenu] = useState(false);
   const [size, setSize] = useState(0);
   const [poke, setPoke] = useState(0); // "Try now" polls again straight away
@@ -381,6 +382,11 @@ function Chat({ agentId }: { agentId: string }) {
     run(call(AGENTS, `/users/${agentId}/accept`, { accept: yes }));
   };
   const leave = () => m && confirm('Leave this challenge?') && run(call(API, `/matches/${m.match_id}/leave`, { agent_id: agentId }));
+  // "OK to share?" and the chat never share the screen: until they answer, the chat folds into one line (Pebble's
+  // latest message), and opening it puts the card away instead.
+  const deciding = !status.consented;
+  const chatShown = !deciding || chatOpen;
+  const latest = [...status.transcript].reverse().find(l => l.role !== 'user')?.text;
 
   return (
     <main className="app chat">
@@ -406,7 +412,14 @@ function Chat({ agentId }: { agentId: string }) {
         <Flow match={m} me={agentId} />
       ) : (
         <>
-          <section className="transcript" aria-live="polite">
+          {!chatShown && (
+            <button className="chat-peek" onClick={() => setChatOpen(true)}>
+              <span className="mini" aria-hidden="true"><Pebble decorative size={30} /></span>
+              <span className="peek-text">{latest ?? 'Say hi to Pebble'}</span>
+              <span className="peek-open">Chat</span>
+            </button>
+          )}
+          {chatShown && <section className="transcript" aria-live="polite">
             {status.transcript.map((line, i) => {
               // Like any messenger: Pebble's face sits by the last of its bubbles in a row. Updates are Pebble too,
               // passing on news (from the Coordinator or about your own taps), so they share the face.
@@ -427,10 +440,14 @@ function Chat({ agentId }: { agentId: string }) {
               </div>
             )}
             <div ref={end} />
-          </section>
+          </section>}
 
-          {!status.consented ? (
-            <Consent shared={status.would_share} onShare={yes => run(call(AGENTS, `/users/${agentId}/consent`, { share: yes }))} />
+          {deciding ? (
+            chatOpen ? (
+              <button className="btn" onClick={() => setChatOpen(false)}>Back to “OK to share?”</button>
+            ) : (
+              <Consent shared={status.would_share} onShare={yes => run(call(AGENTS, `/users/${agentId}/consent`, { share: yes }))} />
+            )
           ) : m ? (
             <MatchCard
               m={m}
@@ -473,10 +490,12 @@ function Chat({ agentId }: { agentId: string }) {
             </>
           )}
 
-          <form className="composer" onSubmit={send}>
-            <input value={draft} onChange={e => setDraft(e.target.value)} placeholder="Message Pebble…" maxLength={2000} aria-label="Message your agent" />
-            <button className="icon-btn" type="submit" aria-label="Send" disabled={thinking || !draft.trim()}><Icon name="send" size={22} /></button>
-          </form>
+          {chatShown && (
+            <form className="composer" onSubmit={send}>
+              <input value={draft} onChange={e => setDraft(e.target.value)} placeholder="Message Pebble…" maxLength={2000} aria-label="Message your agent" />
+              <button className="icon-btn" type="submit" aria-label="Send" disabled={thinking || !draft.trim()}><Icon name="send" size={22} /></button>
+            </form>
+          )}
         </>
       )}
       {error && <p className="error">{error}</p>}

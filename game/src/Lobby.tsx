@@ -275,7 +275,7 @@ function Chat({ agentId }: { agentId: string }) {
   const [error, setError] = useState('');
   const [lost, setLost] = useState(false); // polling the agent failed
   const [tab, setTab] = useState<'chat' | 'flow'>('chat');
-  const [chatOpen, setChatOpen] = useState(false); // the chat, opened over "OK to share?"
+  const [chatOpen, setChatOpen] = useState(false); // the chat, opened over the card that folds it (see below)
   const [menu, setMenu] = useState(false);
   const [size, setSize] = useState(0);
   const [poke, setPoke] = useState(0); // "Try now" polls again straight away
@@ -358,6 +358,11 @@ function Chat({ agentId }: { agentId: string }) {
     location.assign('?');
   };
 
+  // Which card folds the chat away right now: "OK to share?", or between challenges rating the last one and starting
+  // a new one. A new reason starts folded again.
+  const folding = !status ? '' : !status.consented ? 'share' : !status.match ? 'start' : '';
+  useEffect(() => setChatOpen(false), [folding]);
+
   if (!status) {
     return (
       <main className="app">
@@ -382,10 +387,11 @@ function Chat({ agentId }: { agentId: string }) {
     run(call(AGENTS, `/users/${agentId}/accept`, { accept: yes }));
   };
   const leave = () => m && confirm('Leave this challenge?') && run(call(API, `/matches/${m.match_id}/leave`, { agent_id: agentId }));
-  // "OK to share?" and the chat never share the screen: until they answer, the chat folds into one line (Pebble's
-  // latest message), and opening it puts the card away instead.
+  // Those cards and the chat never share the screen: the chat folds into one line (Pebble's latest message), and
+  // opening it puts the cards away instead, behind a button back to them.
   const deciding = !status.consented;
-  const chatShown = !deciding || chatOpen;
+  const chatShown = !folding || chatOpen;
+  const back = (to: string) => <button className="btn" onClick={() => setChatOpen(false)}>Back to “{to}”</button>;
   const latest = [...status.transcript].reverse().find(l => l.role !== 'user')?.text;
 
   return (
@@ -443,9 +449,7 @@ function Chat({ agentId }: { agentId: string }) {
           </section>}
 
           {deciding ? (
-            chatOpen ? (
-              <button className="btn" onClick={() => setChatOpen(false)}>Back to “OK to share?”</button>
-            ) : (
+            chatOpen ? back('OK to share?') : (
               <Consent shared={status.would_share} onShare={yes => run(call(AGENTS, `/users/${agentId}/consent`, { share: yes }))} />
             )
           ) : m ? (
@@ -458,7 +462,7 @@ function Chat({ agentId }: { agentId: string }) {
               onCancel={() => run(call(API, `/challenges/${m.match_id}/cancel`, {}))}
               onLeave={leave}
             />
-          ) : (
+          ) : chatOpen ? back('Start a challenge') : (
             <>
               {status.last_match && (
                 <section className="card plain">

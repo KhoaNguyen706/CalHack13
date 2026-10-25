@@ -16,6 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .broker import Broker
 from .coordinator import Conflict, Coordinator, NotFound
 from .events import EventLog
+from .mcp_server import mcp, serve_inside
 from .models import Accept, Agent, Ask, CheckIn, Leave, Match, MatchState, NewChallenge, Question, Reply, StateChange
 from .mirror import Mirror
 from .spacetime import Spacetime
@@ -61,9 +62,11 @@ def create_app(
     game_poll_s: float = 1.5,
     mirror: Callable[[], Mirror | None] = make_mirror,
 ) -> FastAPI:
+    mcp_app = mcp.http_app(path="/mcp")
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        async with httpx.AsyncClient() as http:
+        async with mcp_app.lifespan(app), httpx.AsyncClient() as http:
             app.state.coord = Coordinator(
                 store=Store(db_path, mirror()),
                 events=EventLog(),
@@ -246,6 +249,10 @@ def create_app(
     async def log_history() -> list[dict]:
         return coord().events.history
 
+    # Any MCP agent (a judge's own Claude as a connector) joins the live event at /mcp. Mounted last, so every route
+    # above still wins.
+    serve_inside(app)
+    app.mount("/", mcp_app)
     return app
 
 

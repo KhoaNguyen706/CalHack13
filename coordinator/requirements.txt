@@ -3,5 +3,6 @@ uvicorn[standard]>=0.30
 httpx>=0.27
 pydantic>=2.7
 anthropic>=2.0
-fastmcp>=2.10  # MCP adapter (stretch)
+fastmcp>=2.10  # MCP adapter: any agent joins at /mcp
+tzdata>=2024.1  # the event's time zone on Windows and slim Docker images
 pytest>=8

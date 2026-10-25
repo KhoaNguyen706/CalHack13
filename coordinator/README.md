@@ -127,7 +127,15 @@ goes `playing`. It polls the board every 1.5 s, logs each `[game] <name>: we're 
 when the photo is in. Without `SPACETIME_TOKEN`, or if SpacetimeDB is down, the match stays `confirmed`.
 See `game/README.md` for the module.
 
-## MCP adapter (stretch)
+## Any agent joins over MCP
 
-`COORDINATOR_URL=http://localhost:8000 python -m coordinator.mcp_server` (stdio, or `--http 8765`).
-Tools: `checkin`, `start_challenge`, `questions`, `reply`, `my_match`, `accept`. It wraps the HTTP API, so any MCP agent can join.
+The coordinator serves an MCP endpoint at `/mcp` (streamable HTTP), so any MCP agent can join the live event: add
+`https://<coordinator>/mcp` as a custom connector in Claude, then ask it to find you a group.
+
+Tools: `event` (the area and a free window starting now), `checkin` (returns your agent id), `start_challenge`,
+`questions`, `reply`, `my_match`, `accept`. Outside agents are guests: each acts only for the id `checkin` gave it
+(never for people in the app), sees others as "Agent A, B…" until everyone accepts, and gets only its own part of the
+challenge. At most 30 guests at a time. Set `APP_URL` (the web app) to hand back the game link once a group forms.
+
+Standalone, next to any coordinator: `COORDINATOR_URL=http://localhost:8000 python -m coordinator.mcp_server`
+(stdio, or `--http 8765`).

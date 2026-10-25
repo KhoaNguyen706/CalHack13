@@ -205,6 +205,40 @@ summary:focus-visible {
   gap: 20px;
 }
 
+/* The challenge's two pages: meet first, then the challenge. One swipes off to the left, the next slides in. */
+.page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+}
+
+.page.swipe-out {
+  animation: swipe-out 320ms var(--ease) forwards;
+}
+
+.page.swipe-in {
+  animation: swipe-in 380ms var(--ease) both;
+}
+
+.app:has(.page.swipe-out, .page.swipe-in) {
+  overflow-x: clip;
+}
+
+@keyframes swipe-out {
+  to {
+    transform: translateX(-110%);
+    opacity: 0;
+  }
+}
+
+@keyframes swipe-in {
+  from {
+    transform: translateX(110%);
+    opacity: 0;
+  }
+}
+
 .grow {
   flex: 1;
 }

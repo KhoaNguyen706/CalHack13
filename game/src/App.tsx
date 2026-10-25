@@ -13,6 +13,7 @@ const MATCH = params.get('match') ?? '';
 const AGENT = params.get('agent') ?? '';
 const CHAT = `?agent=${AGENT}`;
 const VIEW = `krew-view:${MATCH}`;
+const MET = `krew-met:${MATCH}`; // this phone tapped We're here at the meeting point
 
 // You've seen this challenge: from now on the chat lets you stay when you tap "<".
 if (MATCH) {
@@ -315,6 +316,14 @@ export default function App() {
   const [notQuite, setNotQuite] = useState(''); // why the last group photo didn't pass
   const [shooting, setShooting] = useState(false); // the group photo camera is open
   const [sending, setSending] = useState(false);
+  const [met, setMet] = useState(() => {
+    try {
+      return !!localStorage.getItem(MET);
+    } catch {
+      return false;
+    }
+  });
+  const [swipe, setSwipe] = useState<'out' | 'in'>(); // the meeting page swiping off, the challenge sliding in
   const [reaction, react] = useReaction();
   const joined = useRef(false);
   const arrived = useRef<Set<string> | null>(null);
@@ -347,7 +356,7 @@ export default function App() {
     const now = new Set(seats.filter(s => s.checkedIn).map(s => String(s.seatId)));
     if (arrived.current) {
       const fresh = seats.find(s => s.checkedIn && !arrived.current!.has(String(s.seatId)) && s.seatId !== mySeat?.seatId);
-      if (fresh) react('excited', `${nameOf(fresh.agentId)} is here!`);
+      if (fresh) react('excited', `${nameOf(fresh.agentId)} is at the spot!`);
     }
     arrived.current = now;
   }, [seats]);
@@ -365,6 +374,22 @@ export default function App() {
   const run = (p: Promise<unknown>) => {
     setError('');
     return p.catch(e => setError(String(e?.message ?? e)));
+  };
+
+  // We're here at the meeting point: just this phone's own page, so the meeting page swipes off and the challenge
+  // slides in.
+  const haveMet = () => {
+    buzz(14);
+    setSwipe('out');
+    setTimeout(() => {
+      setMet(true);
+      setSwipe('in');
+      try {
+        localStorage.setItem(MET, '1');
+      } catch {
+        // private mode: a reload shows the meeting page again, that's all
+      }
+    }, 320);
   };
 
   // Leave at any point: the coordinator drops your seat (or calls the challenge off if too few are left).
@@ -444,16 +469,35 @@ export default function App() {
   const unlocked = round.state === 'unlocked';
   const here = seats.filter(s => s.checkedIn).length;
   const meet = challenge?.meet;
+  const others = (view?.members ?? []).filter(m => m.agent_id !== AGENT).map(m => m.name);
 
+  // Page 1: meet your group first. Nothing else until this phone taps We're here.
+  if (meet && round.state === 'playing' && !met && !mySeat?.checkedIn) {
+    return (
+      <Shell>
+        <Top heading={heading} minutes={minutesLeft} />
+        <div className={`page${swipe === 'out' ? ' swipe-out' : ''}`}>
+          <MeetCard meet={meet} onShow={() => setSign(true)} />
+          {others.length > 0 && <p className="muted center">You're meeting {others.join(' and ')}.</p>}
+          <div className="grow" />
+          <p className="muted small center">Found each other? Tap We're here and the challenge begins.</p>
+          <button className="btn primary big" disabled={!!swipe} onClick={haveMet}>We're here</button>
+          <button className="link" onClick={() => run(leave())}>Leave challenge</button>
+          {error && <p className="error">{error}</p>}
+        </div>
+        {sign && <SignScreen meet={meet} onClose={() => setSign(false)} />}
+        <Toast reaction={reaction} />
+      </Shell>
+    );
+  }
+
+  // Page 2: the challenge. Hints for the spot, then (everyone at the spot) the answer, the pose and the photo.
   return (
     <Shell>
       <Top heading={challenge?.title ?? 'Challenge'} minutes={minutesLeft} />
+      <div className={`page${swipe === 'in' ? ' swipe-in' : ''}`}>
 
-      {/* 1. Meet your group: where, and the sign to hold up. */}
-      {meet && round.state === 'playing' && <MeetCard meet={meet} onShow={() => setSign(true)} />}
-      {meet && sign && <SignScreen meet={meet} onClose={() => setSign(false)} />}
-
-      {/* 2. Find the spot: your hint, until everyone's there. */}
+      {/* 1. Find the spot: your hint, until everyone's there. */}
       {round.state === 'playing' && (myHint !== undefined ? (
         <section className="card hero">
           <CardHead eyebrow="Your hint for the spot" />
@@ -465,7 +509,7 @@ export default function App() {
         <section className="card plain"><p className="muted">Joining as {nameOf(AGENT)}…</p></section>
       ))}
 
-      {/* 3. Everyone's at the spot: the answer to the hints, to confirm it, and your part of the pose picture. */}
+      {/* 2. Everyone's at the spot: the answer to the hints, to confirm it, and your part of the pose picture. */}
       {unlocked && challenge?.spot_name && (
         <section className="card">
           <CardHead eyebrow="The spot" tone="green" title={challenge.spot_name.charAt(0).toUpperCase() + challenge.spot_name.slice(1)} />
@@ -489,12 +533,17 @@ export default function App() {
       <section className="card plain">
         <span className="eyebrow muted">Steps</span>
         <ol className="step-list">
+          {meet && (
+            <li className="done">
+              <p className="step"><span className="dot"><Icon name="check" size={14} /></span>Meet your group</p>
+            </li>
+          )}
           <li className={unlocked ? 'done' : 'cur'}>
-            <p className="step"><span className="dot">{unlocked && <Icon name="check" size={14} />}</span>Find the spot together and tap We're here</p>
+            <p className="step"><span className="dot">{unlocked && <Icon name="check" size={14} />}</span>Find the spot together and tap We're at the spot</p>
           </li>
           <li className={unlocked ? 'cur' : 'lock'}>
             <p className="step"><span className="dot" />Do the pose and take the group photo there</p>
-            {!unlocked && <p className="why">The pose shows up when everyone has tapped We're here.</p>}
+            {!unlocked && <p className="why">The pose shows up when everyone has tapped We're at the spot.</p>}
             {unlocked && <p className="why">Take a selfie together, each of you in your own space in the frame.</p>}
             {notQuite && <p className="why not">Not quite: {notQuite}</p>}
           </li>
@@ -511,7 +560,7 @@ export default function App() {
             <span key={s.seatId} className={`mark big${s.checkedIn ? ' ok' : ''}`}>
               <Icon name={s.checkedIn ? 'check' : 'clock'} size={16} />
               {s.seatId === mySeat?.seatId ? 'You' : nameOf(s.agentId)}
-              <small>· {s.checkedIn ? 'here' : s.player ? 'on the way' : 'not joined'}</small>
+              <small>· {s.checkedIn ? 'at the spot' : s.player ? 'on the way' : 'not joined'}</small>
             </span>
           ))}
         </div>
@@ -522,7 +571,7 @@ export default function App() {
       {round.state === 'playing' && (mySeat?.checkedIn ? (
         <div className="status big"><Icon name="clock" size={20} /><span>Waiting for the others…</span></div>
       ) : (
-        <button className="btn primary big" disabled={!mySeat} onClick={() => { buzz(14); run(checkIn({ matchId: MATCH })); }}>We're here</button>
+        <button className="btn primary big" disabled={!mySeat} onClick={() => { buzz(14); run(checkIn({ matchId: MATCH })); }}>We're at the spot</button>
       ))}
       {unlocked && (
         <button className="btn primary big" disabled={sending} onClick={() => setShooting(true)}>
@@ -530,6 +579,10 @@ export default function App() {
           {sending ? 'Checking…' : notQuite ? 'Try another photo' : 'Take the group photo'}
         </button>
       )}
+
+      <button className="link" onClick={() => run(leave())}>Leave challenge</button>
+      {error && <p className="error">{error}</p>}
+      </div>
       {shooting && (
         <GroupCamera
           names={pose ? pose.cuts.slice(1).map((_, i) => holders[i] ?? 'Someone') : seats.map(s => nameOf(s.agentId))}
@@ -541,9 +594,6 @@ export default function App() {
           }}
         />
       )}
-
-      <button className="link" onClick={() => run(leave())}>Leave challenge</button>
-      {error && <p className="error">{error}</p>}
       <Toast reaction={reaction} />
     </Shell>
   );

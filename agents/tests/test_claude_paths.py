@@ -139,7 +139,8 @@ def test_claude_picks_the_spot_and_checks_the_photo(setup):
     images = [b["source"] for b in content if b["type"] == "image"]
     png = base64.b64encode(b"\x89PNG fake").decode()
     assert images == [{"type": "base64", "media_type": "image/png", "data": png}, {"type": "base64", "media_type": "image/png", "data": "aGk="}]
-    assert f"Taken at {spot.name}" in content[-1]["text"]  # the meme is the reference; the check names the spot
+    text = content[-1]["text"]
+    assert spot.name in text and "Pass almost any real photo" in text  # the meme is the reference; lenient check
 
     # A photo URL is downloaded and sent inline; one that isn't an image fails instead of counting.
     out = client.post("/challenges/m1/check", json={"step": "photo", "image_url": "https://photos.example/us.png"}).json()

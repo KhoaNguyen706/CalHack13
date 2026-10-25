@@ -173,3 +173,23 @@ def test_claude_adjustments_reach_only_known_players(monkeypatch):
     rotunda = [s for s in SPOTS if s.id == "rotunda"]
     rnd = asyncio.run(designer.design(object(), "m", 5, players, place, "Saturday", rotunda, POSES, "m1"))[0]["round"]
     assert rnd["tuned"] == {"phong": "Kept it short, since your last one ran long."} and rnd["timer_min"] == 10
+
+
+def test_the_chat_agent_never_sees_the_spot():
+    import json
+    from types import SimpleNamespace
+
+    from agents import chat
+
+    status = {
+        "match": {"state": "playing", "members": ["phong"], "window": "Sat 14:00-16:00"}, "checked_in": True,
+        "challenge": {"title": "Spot & Pose", "spot_name": "the Rotunda", "spot_about": "The big dome."},
+        "my_part": "It has a huge dome on top.", "progress": None,
+    }
+
+    async def get_status(user):
+        return status
+
+    svc = SimpleNamespace(status=get_status, display=lambda a: a.title())
+    out = json.loads(asyncio.run(chat._my_challenge(svc, None, {})))
+    assert out["challenge"] == {"title": "Spot & Pose"} and out["my_part"] == "It has a huge dome on top."

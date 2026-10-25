@@ -158,7 +158,8 @@ async def _my_challenge(svc: AgentsService, user: User, args: dict) -> str:
             "state": m["state"],
             "people": [svc.display(a) for a in m["members"]],
             "window": m["window"],
-            "challenge": s["challenge"],
+            # Not the spot's name: the agent shouldn't give away the answer to the hints.
+            "challenge": {k: v for k, v in (s["challenge"] or {}).items() if k not in ("spot_name", "spot_about")},
             "my_part": s["my_part"],
             "progress": s["progress"],
         }

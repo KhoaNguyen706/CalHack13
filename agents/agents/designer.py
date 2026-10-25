@@ -164,11 +164,12 @@ def template(
     n = len(members)
     cuts = pose.cuts if pose.people == n or not n else [round(i / n, 4) for i in range(n + 1)]
     holders = random.Random(seed).sample(members, n)  # who holds which part, left to right
+    # Lenient on purpose: the group got to the spot and tried the pose, so almost any real group photo passes.
     check = (
-        f"Taken at {spot.name}: the background shows {spot.check}. The people in it recreate the pose in the "
-        f"reference picture: {pose.pose}. The reference shows only the pose, not the place. It's fine if one player "
-        "is missing because they took the photo. The reason must never name or describe the spot or the pose: say "
-        "only what's missing, like \"that doesn't look like the spot yet\"."
+        f"The group was asked to take a photo at {spot.name} ({spot.check}) doing this pose: {pose.pose}. Pass almost "
+        "any real photo of people they took together. Don't fail it for the place, the pose, angles, lighting, blur, "
+        "missing players or people in the background. Fail it only if there's clearly nobody in it, or it's a "
+        "screenshot or the reference picture itself. When it passes, say something nice about their pose."
     )
     return {
         "group": members,
@@ -182,6 +183,9 @@ def template(
             "pieces": {m: i for i, m in enumerate(holders)},  # each player's part of the picture
             "reference_photo": pose.image,
             "spot": spot.id,
+            # Public, but the page only shows them once everyone has tapped We're here, to confirm the spot.
+            "spot_name": spot.name,
+            "spot_about": spot.about,
             "answer": f"{spot.name} · {pose.name}",  # the game board reveals it at the end
             "unlock": "everyone taps We're here at the spot, then the group photo passes its check",
             "timer_min": max(5, min(30, timer_min)),

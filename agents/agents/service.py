@@ -75,9 +75,13 @@ PAST_CHALLENGES = "how did the last challenge go: too long, too hard, what they 
 
 
 def public_round(rnd: dict) -> dict:
-    """The challenge as every player may see it: not the others' hints, the answer, or the photo check (it names
-    the spot). `shared` holds the hints of people who left, so the rest can still solve it."""
-    keys = ("type", "title", "goal", "pose", "pieces", "shared", "reference_photo", "timer_min", "unlock", "meet")
+    """The challenge as every player may see it: not the others' hints or the photo check. `shared` holds the hints
+    of people who left, so the rest can still solve it. The game page keeps `spot_name`, `spot_about` and the pose
+    hidden until everyone has tapped We're here."""
+    keys = (
+        "type", "title", "goal", "pose", "pieces", "shared", "reference_photo", "timer_min", "unlock", "meet",
+        "spot_name", "spot_about",
+    )
     steps = [{"id": s["id"], "task": s["task"]} for s in rnd.get("steps") or []]
     return {**{k: rnd.get(k) for k in keys}, "steps": steps}
 

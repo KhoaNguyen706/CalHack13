@@ -1567,6 +1567,117 @@ details[open].card summary::after {
   animation: arrive 500ms var(--ease) both;
 }
 
+/* The group photo camera: full screen, live view with one space per person */
+.camera {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px 16px max(20px, env(safe-area-inset-bottom));
+  background: #000;
+  color: #fff;
+}
+
+.camera-view {
+  position: relative;
+  overflow: hidden;
+  border-radius: 14px;
+  background: #111;
+}
+
+.camera-view video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.camera-view video.mirror {
+  transform: scaleX(-1);
+}
+
+.camera-spaces {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  pointer-events: none;
+}
+
+.camera-spaces > div {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 12px;
+}
+
+.camera-spaces > div + div {
+  border-left: 3px dashed rgba(255, 255, 255, 0.85);
+}
+
+.camera-spaces span {
+  max-width: 92%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.camera-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+
+.camera-btn {
+  min-width: 52px;
+  height: 52px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.shutter {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  border: 5px solid rgba(255, 255, 255, 0.5);
+  background: #fff;
+  background-clip: padding-box;
+  cursor: pointer;
+}
+
+.camera-btn:disabled,
+.shutter:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.camera-off {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
 /* The pose picture, like a printed photo: your part shows, the others' parts are covered with who has them. */
 .pose-frame {
   position: relative;

@@ -35,7 +35,7 @@ Test the MVP on one laptop with two people: start with `GROUP_SIZE=2 docker comp
    `ben` (Finding the way), with overlapping free time.
 2. In one window, tap **Find my group**. Both windows get the plan question; tap **Yes** in each within 20 s.
 3. Tap **Accept** in both. Each window opens its game page with a hint for the spot: tap "We're here" in both, and
-   each gets its part of the pose picture. Then add the group photo.
+   each gets the answer and its part of the pose picture. Then take the group photo with the in-app camera.
 
 Don't seed personas for this: the seeded bots would get paired with you.
 
@@ -59,7 +59,7 @@ curl -X POST localhost:8000/matching/run          # note the match_id of linh/ma
 ```
 
 Open the game page three times (`agent=linh`, `agent=marcus`, `agent=priya`), tap "We're here" on each,
-then add the group photo. The coordinator log ends with `challenge complete!`.
+then take the group photo. The coordinator log ends with `challenge complete!`.
 
 - Claude matching: put `ANTHROPIC_API_KEY` in `.env`. Without it, matching uses the rule score.
 - Phones: the page reaches the coordinator (`/api`) and SpacetimeDB (`/stdb`) through its own address, so only port

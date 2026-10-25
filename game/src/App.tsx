@@ -37,6 +37,8 @@ type View = {
     pose?: Pose | null;
     pieces?: Record<string, number> | null; // agent_id -> their part of the picture
     shared?: Record<string, string> | null; // agent_id -> the hint of someone who left
+    spot_name?: string | null; // shown once everyone has tapped We're here, to confirm the spot
+    spot_about?: string | null;
   } | null;
 };
 type Summary = { waiting_for: string[]; mutual_meet_again: boolean; my_matches: string[]; share_ok: boolean };
@@ -156,32 +158,96 @@ function PoseFrame({ pose, mine, shown, holders }: { pose: Pose; mine?: number; 
   );
 }
 
-// A hidden photo input. With `facing` it opens the camera straight away on phones; without it, phones also offer the
-// photo library, so a photo taken on the camera's timer works too.
-function Camera({ facing, label, busy, big, onPhoto }: { facing?: 'user' | 'environment'; label: string; busy: string; big?: boolean; onPhoto: (f: File) => Promise<unknown> }) {
+// The camera for the group photo, opened straight from the button: a selfie camera by default, so the group can pose
+// and shoot at once, with one space per person, left to right in the same order as the pose picture, so everyone
+// knows where to stand. Without camera access (an old browser, or permission refused) it falls back to the phone's
+// own camera.
+function GroupCamera({ names, onPhoto, onClose }: { names: string[]; onPhoto: (image: string) => void; onClose: () => void }) {
+  const video = useRef<HTMLVideoElement>(null);
   const input = useRef<HTMLInputElement>(null);
-  const [working, setWorking] = useState(false);
+  const [facing, setFacing] = useState<'environment' | 'user'>('user');
+  const [size, setSize] = useState<{ w: number; h: number }>(); // the live video's, once it plays
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!navigator.mediaDevices?.getUserMedia) return setFailed(true);
+    let live = true;
+    let stream: MediaStream | undefined;
+    setSize(undefined);
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: facing, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false })
+      .then(s => {
+        if (!live) return s.getTracks().forEach(t => t.stop());
+        stream = s;
+        if (video.current) video.current.srcObject = s;
+      })
+      .catch(() => live && setFailed(true));
+    return () => {
+      live = false;
+      stream?.getTracks().forEach(t => t.stop());
+    };
+  }, [facing]);
+
+  // The frame as shown: the selfie camera is mirrored, so the photo matches what everyone saw.
+  const shoot = () => {
+    const v = video.current;
+    if (!v?.videoWidth) return;
+    const scale = Math.min(1, 1280 / Math.max(v.videoWidth, v.videoHeight));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(v.videoWidth * scale);
+    canvas.height = Math.round(v.videoHeight * scale);
+    const ctx = canvas.getContext('2d')!;
+    if (facing === 'user') {
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+    }
+    ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
+    buzz(20);
+    onPhoto(canvas.toDataURL('image/jpeg', 0.82).split(',')[1]);
+  };
+
+  const ratio = size ? size.w / size.h : 3 / 4;
   return (
-    <>
-      <input
-        ref={input}
-        type="file"
-        accept="image/*"
-        capture={facing}
-        hidden
-        onChange={e => {
-          const file = e.target.files?.[0];
-          e.target.value = '';
-          if (!file) return;
-          setWorking(true);
-          onPhoto(file).finally(() => setWorking(false));
-        }}
-      />
-      <button className={big ? 'btn primary big' : 'btn'} disabled={working} onClick={() => input.current?.click()}>
-        <Icon name="camera" size={big ? 24 : 20} />
-        {working ? busy : label}
-      </button>
-    </>
+    <div className="camera" role="dialog" aria-label="Group photo">
+      {failed ? (
+        <div className="camera-off">
+          <p>This browser can't open the camera here.</p>
+          <input
+            ref={input}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            hidden
+            onChange={e => {
+              const file = e.target.files?.[0];
+              e.target.value = '';
+              if (file) shrink(file).then(onPhoto);
+            }}
+          />
+          <button className="btn primary" onClick={() => input.current?.click()}><Icon name="camera" size={20} />Use the phone's camera</button>
+        </div>
+      ) : (
+        <div className="camera-view" style={{ aspectRatio: `${ratio}`, width: `min(100%, calc((100dvh - 170px) * ${ratio}))` }}>
+          <video
+            ref={video}
+            autoPlay
+            playsInline
+            muted
+            className={facing === 'user' ? 'mirror' : undefined}
+            onLoadedMetadata={e => setSize({ w: e.currentTarget.videoWidth, h: e.currentTarget.videoHeight })}
+          />
+          {/* One space per person, left to right like the pose picture. */}
+          <div className="camera-spaces">
+            {names.map((name, i) => <div key={i}><span>{name}</span></div>)}
+          </div>
+        </div>
+      )}
+      <div className="camera-bar">
+        <button className="camera-btn" onClick={onClose} aria-label="Close the camera"><Icon name="close" size={22} /></button>
+        <button className="shutter" disabled={!size} onClick={shoot} aria-label="Take the photo" />
+        <button className="camera-btn" disabled={failed} onClick={() => setFacing(f => (f === 'user' ? 'environment' : 'user'))} aria-label="Switch camera">Flip</button>
+      </div>
+    </div>
   );
 }
 
@@ -246,6 +312,8 @@ export default function App() {
   const [error, setError] = useState('');
   const [sign, setSign] = useState(false); // the group's sign, full screen
   const [notQuite, setNotQuite] = useState(''); // why the last group photo didn't pass
+  const [shooting, setShooting] = useState(false); // the group photo camera is open
+  const [sending, setSending] = useState(false);
   const [reaction, react] = useReaction();
   const joined = useRef(false);
   const arrived = useRef<Set<string> | null>(null);
@@ -307,8 +375,7 @@ export default function App() {
 
   // The group photo: the AI checks the spot and the pose. Once it passes it goes to the agents service (stores it,
   // gives a link) and then the live board, which completes the round on every phone.
-  const groupPhoto = async (file: File) => {
-    const image = await shrink(file);
+  const groupPhoto = async (image: string) => {
     if (photoStep) {
       const out = await post<{ passed: boolean; reason: string }>(`${AGENTS}/challenges/${MATCH}/check`, {
         step: photoStep, agent_id: AGENT, image_base64: image, media_type: 'image/jpeg',
@@ -397,7 +464,14 @@ export default function App() {
         <section className="card plain"><p className="muted">Joining as {nameOf(AGENT)}…</p></section>
       ))}
 
-      {/* 3. Everyone's at the spot: your part of the pose picture. */}
+      {/* 3. Everyone's at the spot: the answer to the hints, to confirm it, and your part of the pose picture. */}
+      {unlocked && challenge?.spot_name && (
+        <section className="card">
+          <CardHead eyebrow="The spot" tone="green" title={challenge.spot_name.charAt(0).toUpperCase() + challenge.spot_name.slice(1)} />
+          {challenge.spot_about && <p className="muted">{challenge.spot_about}</p>}
+          <p className="muted small">Not there yet? Head over before you take the photo.</p>
+        </section>
+      )}
       {unlocked && pose && (
         <section className="card hero">
           <CardHead eyebrow="The pose" title="Put your parts together" />
@@ -420,7 +494,7 @@ export default function App() {
           <li className={unlocked ? 'cur' : 'lock'}>
             <p className="step"><span className="dot" />Do the pose and take the group photo there</p>
             {!unlocked && <p className="why">The pose shows up when everyone has tapped We're here.</p>}
-            {unlocked && <p className="why">Ask someone nearby to take it, or prop a phone up and use its timer.</p>}
+            {unlocked && <p className="why">Take a selfie together, each of you in your own space in the frame.</p>}
             {notQuite && <p className="why not">Not quite: {notQuite}</p>}
           </li>
         </ol>
@@ -449,7 +523,23 @@ export default function App() {
       ) : (
         <button className="btn primary big" disabled={!mySeat} onClick={() => { buzz(14); run(checkIn({ matchId: MATCH })); }}>We're here</button>
       ))}
-      {unlocked && <Camera big label={notQuite ? 'Try another photo' : 'Add the group photo'} busy="Checking…" onPhoto={f => run(groupPhoto(f))} />}
+      {unlocked && (
+        <button className="btn primary big" disabled={sending} onClick={() => setShooting(true)}>
+          <Icon name="camera" size={24} />
+          {sending ? 'Checking…' : notQuite ? 'Try another photo' : 'Take the group photo'}
+        </button>
+      )}
+      {shooting && (
+        <GroupCamera
+          names={pose ? pose.cuts.slice(1).map((_, i) => holders[i] ?? 'Someone') : seats.map(s => nameOf(s.agentId))}
+          onClose={() => setShooting(false)}
+          onPhoto={image => {
+            setShooting(false);
+            setSending(true);
+            run(groupPhoto(image)).finally(() => setSending(false));
+          }}
+        />
+      )}
 
       <button className="link" onClick={() => run(leave())}>Leave challenge</button>
       {error && <p className="error">{error}</p>}

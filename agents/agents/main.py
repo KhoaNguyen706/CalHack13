@@ -21,6 +21,7 @@ from .memory import Memory
 from .mirror import Mirror
 from .models import Answer, ChatIn, ChatLine, Consent, Decision, DemoLogin, Feedback, Login, PersonalContext, PhotoCheck, PhotoUpload, Question, SpacetimeLogin, Start
 from .place import Place, PlaceService
+from .poses import SIZES, PoseSearch
 from .service import AgentsService, Conflict, NotFound
 from .store import Store
 
@@ -61,16 +62,19 @@ def create_app(
             await memory.start()
             claude_client = claude or llm.make_claude(s.use_claude)
             place = PlaceService(s, web, claude_client)
+            pose_search = PoseSearch(s, web, claude_client, store)
             svc = AgentsService(
                 s, store, memory, CoordinatorClient(coord_http), claude_client, place, load_contexts(),
                 sponsors.load_booths(), sponsors.load_sponsors(), load_contexts(DEMO_PEOPLE),
-                designer.load_spots(), designer.load_poses(),
+                designer.load_spots(), designer.load_poses(), pose_search,
             )
             app.state.svc = svc
             app.state.web = web
             tasks = [asyncio.create_task(svc.watch())] if watch else []
             if s.apify_token:
                 place.refresh(timeutil.now(s.tz))  # warm the cache so the first group gets scraped facts
+            if pose_search.enabled and any(pose_search.stale(n) for n in SIZES):
+                pose_search.refresh()  # and poses found with Apify
             yield
             for t in tasks:
                 t.cancel()
@@ -110,6 +114,7 @@ def create_app(
             "claude": v.claude is not None,
             "moss": v.memory.ready,
             "apify": bool(s.apify_token),
+            "poses_found": {n: len(v.pose_search.found(n)) for n in SIZES},  # per group size; 0 = hand-picked memes
         }
 
     # --- the sample chatbot: real people -----------------------------------------
@@ -295,6 +300,21 @@ def create_app(
     @app.get("/place")
     async def place() -> Place:
         return await svc().place.get(timeutil.now(s.tz))
+
+    @app.get("/poses")
+    async def poses() -> dict:
+        """The poses found with Apify, per group size (empty: groups get the hand-picked memes)."""
+        return {n: [p.model_dump() for p in svc().pose_search.found(n)] for n in SIZES}
+
+    @app.post("/poses/refresh")
+    async def poses_refresh() -> dict:
+        """Search now (Apify + Claude) and wait for it, up to 150 s. Returns how many poses each group size has."""
+        if not svc().pose_search.enabled:
+            raise HTTPException(409, "pose search needs APIFY_TOKEN and Claude")
+        try:
+            return await asyncio.wait_for(asyncio.shield(svc().pose_search.refresh()), 150)
+        except Exception as e:
+            raise HTTPException(502, f"pose search failed: {e!r}")
 
     @app.post("/place/refresh")
     async def place_refresh() -> Place:

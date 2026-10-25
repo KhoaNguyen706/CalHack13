@@ -88,6 +88,7 @@ class Pose(BaseModel):
     cuts: list[float]  # where the picture is cut into parts, left to right: people + 1 values from 0 to 1
     top: float = 0  # crop this much off the top of the picture (caption bars, sky)
     pose: str  # what the photo check looks for
+    source: str = ""  # the page it was found on (poses.py), empty for the hand-picked ones
 
 
 class Hint(BaseModel):

@@ -1,10 +1,12 @@
-"""Users, memories, photo checks, photos and feedback in SQLite, copied to SpacetimeDB when a mirror is set.
+"""Users, memories, photo checks, photos, feedback and found poses in SQLite, copied to SpacetimeDB when a mirror is
+set.
 
 SQLite answers every query. With a mirror (agents/mirror.py) each write is also saved to SpacetimeDB, and a new
 Store starts by reloading those rows, so a restart (Heroku wipes the disk) keeps everyone signed in.
 """
 
 import base64
+import json
 import sqlite3
 import time
 import uuid
@@ -19,7 +21,7 @@ class Mirror(Protocol):
     def delete(self, kind: str, key: str) -> None: ...
 
 
-TABLES = ("users", "memories", "feedback", "photo_checks", "photos")
+TABLES = ("users", "memories", "feedback", "photo_checks", "photos", "pose_cache")
 
 
 class Store:
@@ -43,6 +45,7 @@ class Store:
             "CREATE TABLE IF NOT EXISTS photos (id TEXT PRIMARY KEY, match_id TEXT NOT NULL, agent_id TEXT,"
             " media_type TEXT NOT NULL, data BLOB NOT NULL, ts REAL NOT NULL)"
         )
+        self.db.execute("CREATE TABLE IF NOT EXISTS pose_cache (size INTEGER PRIMARY KEY, body TEXT NOT NULL, ts REAL NOT NULL)")
         if mirror:
             for kind, row in mirror.load():
                 if kind == "photos":
@@ -103,10 +106,11 @@ class Store:
         )
         return [r[0] for r in rows]
 
-    # --- photos (the group photo the game page uploads) --------------------------
+    # --- photos (the group photo the game page uploads, and pose images found with Apify) ---
 
-    def save_photo(self, match_id: str, agent_id: str | None, media_type: str, data: bytes) -> str:
-        photo_id = uuid.uuid4().hex
+    def save_photo(self, match_id: str, agent_id: str | None, media_type: str, data: bytes, photo_id: str | None = None) -> str:
+        """photo_id: a fixed id replaces that photo (a pose image found again); default a new one."""
+        photo_id = photo_id or uuid.uuid4().hex
         row = {"id": photo_id, "match_id": match_id, "agent_id": agent_id, "media_type": media_type, "data": data, "ts": time.time()}
         self._save("photos", photo_id, row)
         return photo_id
@@ -114,6 +118,15 @@ class Store:
     def photo(self, photo_id: str) -> tuple[str, bytes] | None:
         row = self.db.execute("SELECT media_type, data FROM photos WHERE id = ?", (photo_id,)).fetchone()
         return (row[0], row[1]) if row else None
+
+    # --- poses found with Apify (poses.py), one row per group size ---------------
+
+    def pose_cache(self, size: int) -> dict:
+        row = self.db.execute("SELECT body FROM pose_cache WHERE size = ?", (size,)).fetchone()
+        return json.loads(row[0]) if row else {}
+
+    def save_pose_cache(self, size: int, body: dict) -> None:
+        self._save("pose_cache", str(size), {"size": size, "body": json.dumps(body), "ts": time.time()})
 
     # --- photo checks ------------------------------------------------------------
 

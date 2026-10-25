@@ -15,6 +15,7 @@ from .memory import Memory
 from .spacetimeauth import Person
 from .models import Answer, ChatLine, Feedback, Login, PersonalContext, PhotoCheck, Profile, Question, User
 from .place import PlaceService
+from .poses import PoseSearch
 from .sponsors import Booth, SponsorInfo
 from .store import Store
 
@@ -96,6 +97,7 @@ class AgentsService:
         demo_people: list[PersonalContext] | None = None,
         spots: list[designer.Spot] | None = None,
         poses: list[designer.Pose] | None = None,
+        pose_search: PoseSearch | None = None,
     ):
         self.s = settings
         self.store = store
@@ -119,7 +121,8 @@ class AgentsService:
             for b in booths or []
             if b.verified and b.area.strip().casefold() == here
         ]
-        self.poses = poses or []
+        self.poses = poses or []  # hand-picked; pose_search finds fresh ones with Apify
+        self.pose_search = pose_search
         self._stand_in_free: dict[str, str] = {}  # the window each stand-in last checked in with
         self._locks: dict[str, asyncio.Lock] = {}
         self._accepting: set[tuple[str, str]] = set()
@@ -434,9 +437,10 @@ class AgentsService:
         now = timeutil.now(self.s.tz)
         place = await self.place.get(now)
         match_id = (body.get("match") or {}).get("match_id", "")
+        poses = self.pose_search.poses_for(len(players), self.poses) if self.pose_search else self.poses
         challenge, how = await designer.design(
             self.claude, self.s.designer_model, self.s.design_budget_s, players, place, f"{now:%A}, {now.hour % 12 or 12}:{now:%M %p}",
-            self.spots, self.poses, match_id, self.s.meeting_point,
+            self.spots, poses, match_id, self.s.meeting_point,
         )
         challenge["round"]["designed_by"] = how
         log.info("designed %r for %s via %s", challenge["round"]["title"], challenge["group"], how)
@@ -452,9 +456,11 @@ class AgentsService:
         step = next((s for s in steps if s["id"] == body.step), None)
         if step is None:
             raise NotFound(f"no step {body.step} in this challenge")
+        reference = rnd.get("reference_photo")
+        stored = self.store.photo(reference.removeprefix("/photos/")) if reference and reference.startswith("/photos/") else None
         verdict = await vision.check(
             self.claude, self.s.model, self.s.vision_budget_s, self.place.http, rnd.get("title", ""), step,
-            body.image_url, body.image_base64, body.media_type, rnd.get("reference_photo"),
+            body.image_url, body.image_base64, body.media_type, None if stored else reference, stored,
         )
         self.store.save_check(match_id, body.step, verdict.passed, verdict.reason, body.agent_id)
         progress = self.progress(match_id, rnd)

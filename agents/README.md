@@ -7,10 +7,10 @@ those agents and adds the AI parts of the layer:
 - **Sample personal agents.** A chatbot per real person, loaded with a **personal context**: fake personal
   information a real personal agent would already have (`seeds/personal_contexts.json`). It answers the
   coordinator's invitations from that context and its memories.
-- **Challenge designer.** Claude invents an outdoor challenge for whoever joined: photo hunts, checkpoint runs,
-  "find this spot" with a scraped reference photo, a question at a sponsor booth. Every step is proven by one photo.
-- **Photo checks.** Claude looks at each photo and says whether it passes the step.
-- **Place info (Apify)** and **memory (Moss)**.
+- **Challenge designer.** Spot & Pose for whoever joined: hints for a spot nearby, then the parts of one pose
+  picture, then one group photo there doing the pose.
+- **Photo checks.** Claude looks at the group photo and says whether it shows the spot and the pose.
+- **Place info and pose ideas (Apify)** and **memory (Moss)**.
 
 ```bash
 cd agents
@@ -52,7 +52,7 @@ coordinator without that route, it falls back to `/matching/run`.
 | Var | Default | What |
 | --- | --- | --- |
 | `ANTHROPIC_API_KEY` | none | Claude for agents, chat, designer and photo checks. Without it: rule answers, hand-written hints, photos always pass. |
-| `APIFY_TOKEN` | none | Scrapes place info and reference photos. Without it: built-in hackathon facts. |
+| `APIFY_TOKEN` | none | Scrapes place info and pose ideas. Without it: built-in hackathon facts and the hand-picked memes. |
 | `MOSS_PROJECT_ID`, `MOSS_PROJECT_KEY` | none | Semantic memory recall. Without them: newest memories from SQLite. |
 | `MOSS_INDEX` | `agent-memory` | Use a fresh name for the demo, so test memories don't carry over. |
 | `COORDINATOR_URL` | `http://localhost:8000` | |
@@ -89,7 +89,8 @@ or `update` (invitations, joins, steps passed).
 
 The coordinator calls `POST /agents/{id}/question` (the `callback_url` of every agent we run) and
 `POST /challenge` (`CHALLENGE_DESIGNER_URL`). Also: `POST /contexts/seed`, `GET /place`, `POST /place/refresh`,
-`GET /health`. The first agents service's paths still work: `GET /personas`, `POST /personas/checkin-all`
+`GET /poses`, `POST /poses/refresh` (search now and wait, e.g. before a demo), `GET /health` (incl. `poses_found` per
+group size). The first agents service's paths still work: `GET /personas`, `POST /personas/checkin-all`
 (= `/contexts/seed`), `POST /personas/{id}/ask`.
 
 ## How it works
@@ -121,7 +122,16 @@ The coordinator calls `POST /agents/{id}/question` (the `callback_url` of every 
 - **Photo checks** (`vision.py`). Photos are downloaded and sent inline. Generous about angles and blur, strict
   about strangers' faces. A photo that can't be opened fails; without Claude, or if Claude errors, it counts.
 - **Place info** (`place.py`). Apify's RAG Web Browser searches the place, the event and this month; Claude
-  boils the pages down to facts, and page photos become reference photos. Cached per hour in `cache/`.
+  boils the pages down to facts for the hints. Cached per hour in `cache/`.
+- **Pose ideas** (`poses.py`). For each group size (2-5), the RAG Web Browser runs simple searches ("famous 3 person
+  meme pose", "popular funny poses for 3 people", …). Claude judges up to 12 new images at once and keeps single
+  photos with exactly that many people side by side doing a simple, funny or iconic pose anyone can copy in a few
+  seconds (no jumps, kicks or lifting), with where to cut between people. Kept images are copied into the store
+  (`/photos/pose-…`), so expiring links can't break a round. A search takes 30-50 s, so it only runs in the
+  background: groups get a pose already found, mixed with the hand-picked memes (`data/poses.json`) until a size
+  has 6. What's found is kept in the store (copied to SpacetimeDB), so restarts and deploys don't search again. A
+  size searches every 15 minutes until it has 6, then once a day; each search uses phrasings not tried that day,
+  and images already judged never go to Claude again.
 - **Watcher** (`service.py`). Every 2 s: stand-ins accept invitations; real people get chat updates.
 
 ### Before the demo

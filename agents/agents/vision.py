@@ -66,7 +66,9 @@ async def check(
     image_base64: str | None = None,
     media_type: str = "image/jpeg",
     reference_url: str | None = None,
+    reference_image: tuple[str, bytes] | None = None,
 ) -> Verdict:
+    """reference_image: (media_type, bytes) of a reference already on hand (a pose image in the store)."""
     if claude is None:
         return Verdict(passed=True, reason="Looks good! (The photo check is offline, so it counts.)")
     if image_url:
@@ -75,7 +77,10 @@ async def check(
             return Verdict(passed=False, reason="I couldn't open that photo. Try uploading it again.")
     else:
         photo = image_block(data=image_base64, media_type=media_type)
-    reference = await fetch(http, reference_url) if reference_url else None  # no reference beats no check
+    if reference_image:
+        reference = image_block(data=base64.b64encode(reference_image[1]).decode(), media_type=reference_image[0])
+    else:
+        reference = await fetch(http, reference_url) if reference_url else None  # no reference beats no check
     content: list[dict] = []
     if reference:
         content += [{"type": "text", "text": "Reference photo:"}, reference]

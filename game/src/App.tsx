@@ -23,7 +23,8 @@ if (MATCH) {
   }
 }
 
-// The picture, and where it's cut: part i runs from cuts[i] to cuts[i + 1] (fractions of the width).
+// The picture, and where it's cut: part i runs from cuts[i] to cuts[i + 1] (fractions of the width). A pose found
+// with Apify is a copy on the agents service ("/photos/<id>"); the hand-picked ones are full links.
 type Pose = { image: string; cuts: number[]; top?: number };
 type View = {
   state: string;
@@ -39,6 +40,10 @@ type View = {
   } | null;
 };
 type Summary = { waiting_for: string[]; mutual_meet_again: boolean; my_matches: string[]; share_ok: boolean };
+
+function imageUrl(url: string) {
+  return url.startsWith('/') ? AGENTS + url : url;
+}
 
 // "phong-2" (a second Phong) still reads as Phong: the suffix only keeps ids unique.
 function title(id: string) {
@@ -131,14 +136,15 @@ function useRatio(src: string) {
 // The whole pose picture with only some parts showing: yours (and those of people who left). The other parts are
 // covered with the name of who has them, so it's clear they're pieces of one picture.
 function PoseFrame({ pose, mine, shown, holders }: { pose: Pose; mine?: number; shown: number[]; holders: string[] }) {
-  const ratio = useRatio(pose.image);
+  const src = imageUrl(pose.image);
+  const ratio = useRatio(src);
   const top = pose.top ?? 0;
   if (ratio === null) return <p className="muted small">Couldn't load the picture.</p>;
   if (ratio === undefined) return <p className="muted small">Loading the picture…</p>;
   const span = (i: number) => ({ left: `${pose.cuts[i] * 100}%`, width: `${(pose.cuts[i + 1] - pose.cuts[i]) * 100}%` });
   return (
     <div className="pose-frame" style={{ aspectRatio: `${1 / (ratio * (1 - top))}` }}>
-      <img src={pose.image} alt="Your part of the pose" style={{ marginTop: `${-top * ratio * 100}%` }} />
+      <img src={src} alt="Your part of the pose" style={{ marginTop: `${-top * ratio * 100}%` }} />
       {pose.cuts.slice(0, -1).map((_, i) =>
         i === mine ? (
           <div key={i} className="pose-mine" style={span(i)}><span>You</span></div>
@@ -357,7 +363,7 @@ export default function App() {
           {pose && (
             <>
               <p className="eyebrow muted">The original</p>
-              <img className="group-photo" src={pose.image} alt="The pose you recreated" />
+              <img className="group-photo" src={imageUrl(pose.image)} alt="The pose you recreated" />
             </>
           )}
         </section>

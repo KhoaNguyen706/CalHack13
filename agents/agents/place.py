@@ -65,6 +65,23 @@ def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
+async def rag_search(http: httpx.AsyncClient, token: str, query: str, max_results: int = 3) -> list[dict]:
+    """One search with Apify's RAG Web Browser (standby mode): the top pages, each with its markdown and metadata
+    (incl. Open Graph). [] when the search fails."""
+    try:
+        resp = await http.get(
+            RAG_BROWSER,
+            params={"query": query, "maxResults": max_results, "requestTimeoutSecs": 40},
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=60,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except (httpx.HTTPError, ValueError) as e:
+        log.warning("Apify query %r failed: %s", query, e)
+        return []
+
+
 def _log_failure(task: asyncio.Task) -> None:
     if not task.cancelled() and (e := task.exception()):
         log.warning("place refresh failed: %r", e)
@@ -145,23 +162,9 @@ class PlaceService:
         ]
 
     async def scrape(self, queries: list[str]) -> list[dict]:
-        """Run the RAG Web Browser Actor (standby mode) for each query in parallel; failed queries are skipped."""
-
-        async def one(query: str) -> list[dict]:
-            try:
-                resp = await self.http.get(
-                    RAG_BROWSER,
-                    params={"query": query, "maxResults": 3, "requestTimeoutSecs": 40},
-                    headers={"Authorization": f"Bearer {self.s.apify_token}"},
-                    timeout=60,
-                )
-                resp.raise_for_status()
-                return resp.json()
-            except (httpx.HTTPError, ValueError) as e:
-                log.warning("Apify query %r failed: %s", query, e)
-                return []
-
-        pages = [p for batch in await asyncio.gather(*(one(q) for q in queries)) for p in batch]
+        """Run the RAG Web Browser Actor for each query in parallel; failed queries are skipped."""
+        batches = await asyncio.gather(*(rag_search(self.http, self.s.apify_token, q) for q in queries))
+        pages = [p for batch in batches for p in batch]
         return [
             {
                 "url": (p.get("metadata") or {}).get("url") or (p.get("searchResult") or {}).get("url", ""),

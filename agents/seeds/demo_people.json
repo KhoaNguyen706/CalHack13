@@ -38,5 +38,18 @@
     "memories": [
       "Took the group photo at last year's hackathon meetup; everyone used it as their profile picture."
     ]
+  },
+  {
+    "id": "jessica",
+    "name": "Jessica",
+    "free": "Sat 14:00-16:00",
+    "interests": ["design", "music", "food", "hackathons"],
+    "skills": ["ux", "posing"],
+    "group_pref": "small",
+    "style": "Game for anything playful; always the first to strike the pose.",
+    "bio": "UI/UX on team Krew. Turns rough ideas into screens people get at a glance, and never says no to a group photo.",
+    "memories": [
+      "Got a table of strangers playing charades within ten minutes at a design club picnic (5/5)."
+    ]
   }
 ]

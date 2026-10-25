@@ -317,7 +317,7 @@ def test_spacetimeauth_sign_in_keeps_only_the_first_name(coord, tmp_path):
 
 def test_demo_presenters_sign_in_with_agents_that_know_them(client, coord):
     people = client.get("/demo/people").json()
-    assert [p["id"] for p in people] == ["khoa", "phong", "miki"] and people[0]["name"] == "Khoa"
+    assert [p["id"] for p in people] == ["khoa", "phong", "miki", "jessica"] and people[0]["name"] == "Khoa"
     me = client.post("/users/demo", json={"person": "phong"}).json()
     assert me["agent_id"] == "phong" and me["name"] == "Phong" and "puzzles" in me["profile"]["interests"]
     assert "I know you well" in me["transcript"][0]["text"] and not me["consented"]

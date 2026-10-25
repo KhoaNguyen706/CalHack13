@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AGENTS, API, openedKey } from './config.ts';
 import InstallHint from './InstallHint.tsx';
-import { CardHead, Icon, MeetCard, Pebble, PieceIcon, PRIVACY_RULES, Reconnecting, Seats, SignScreen, Walrus, type Meet, type Seat } from './ui.tsx';
+import { buzz, CardHead, Icon, MeetCard, Pebble, PieceIcon, PRIVACY_RULES, Reconnecting, Scribble, Seats, SignScreen, Walrus, type Meet, type PebbleMood, type Seat, type WalrusMood } from './ui.tsx';
 
 // Groups are 2 to 5 (2 for a quick round with one other person). The host can start early once this many accepted;
 // the coordinator's MIN_GROUP_SIZE has the final say on both.
@@ -94,6 +94,30 @@ function when(window: string) {
   return `${DAYS[day] ?? day} · ${start} – ${clock(h2, m2)} ${half(h2)}`;
 }
 
+// The last answer from your agent, kept for this tab: coming back from the game (or reloading) shows the chat as it
+// was straight away instead of a loading screen, and the next poll brings it up to date.
+const CACHE = (agent: string) => `krew-status:${agent}`;
+
+function cached(agent: string): Status | undefined {
+  try {
+    return JSON.parse(sessionStorage.getItem(CACHE(agent)) ?? 'null') ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// How Pebble feels right now, from where you are in the flow (the face in the top bar).
+function moodOf(s: Status, typing: boolean, lost: boolean): PebbleMood {
+  if (lost) return 'sleepy';
+  if (typing) return 'thinking';
+  if (!s.consented) return 'shy';
+  if (s.needs_accept) return 'excited';
+  if (s.match && ['confirmed', 'playing'].includes(s.match.state)) return 'cheer';
+  return s.match ? 'thinking' : 'happy';
+}
+
+const TOGETHER = ['confirmed', 'playing', 'done'];
+
 function useOnline() {
   const [online, setOnline] = useState(navigator.onLine);
   useEffect(() => {
@@ -134,7 +158,7 @@ function FinishSignIn() {
   return (
     <main className="app">
       <section className="conn">
-        <div className="avatar xl"><Pebble mood="thinking" size={164} /></div>
+        <div className="avatar xl"><Pebble mood={error ? 'sad' : 'thinking'} size={164} /></div>
         {error ? (
           <>
             <h2>That didn't work.</h2>
@@ -180,8 +204,8 @@ function Login() {
   return (
     <main className="app">
       <section className="welcome">
-        <div className="avatar xl"><Pebble mood="happy" size={164} /></div>
-        <h1>Meet Pebble, your agent</h1>
+        <div className="avatar xl"><Pebble mood="wave" size={164} /></div>
+        <h1>Meet <span className="doodle">Pebble<i className="squiggle" /></span>, your agent</h1>
         <p className="muted">
           I find a small group nearby for a quick challenge you can only win together. You approve every step, and
           nothing about you is shared until you say OK.
@@ -238,7 +262,7 @@ function seatsFor(m: Match, me: string): Seat[] {
 }
 
 function Chat({ agentId }: { agentId: string }) {
-  const [status, setStatus] = useState<Status>();
+  const [status, setStatus] = useState<Status | undefined>(() => cached(agentId));
   const [draft, setDraft] = useState('');
   const [thinking, setThinking] = useState(false);
   const [error, setError] = useState('');
@@ -249,14 +273,26 @@ function Chat({ agentId }: { agentId: string }) {
   const [poke, setPoke] = useState(0); // "Try now" polls again straight away
   const online = useOnline();
   const end = useRef<HTMLDivElement>(null);
+  const seen = useRef<number | null>(null); // lines already on screen: only newer ones animate in
+  const shownTab = useRef('');
 
   useEffect(() => {
-    let live = true;
+    let live = true, last = '';
     const tick = () =>
       call<Status>(AGENTS, `/users/${agentId}`)
         .then(s => {
           if (!live) return;
-          setStatus(s);
+          // Most polls bring nothing new; skipping those keeps animations from being interrupted by re-renders.
+          const text = JSON.stringify(s);
+          if (text !== last) {
+            last = text;
+            setStatus(s);
+            try {
+              sessionStorage.setItem(CACHE(agentId), text);
+            } catch {
+              // private mode: no instant chat next time, that's all
+            }
+          }
           setLost(false);
           // Open the challenge on its own only the first time; after that "<" from the game must stay here.
           if (s.match?.state === 'playing' && !remembered(openedKey(s.match.match_id))) {
@@ -273,9 +309,16 @@ function Chat({ agentId }: { agentId: string }) {
   }, [agentId, poke]);
 
   const lines = status?.transcript.length ?? 0;
+  const settled = seen.current ?? lines;
+  useEffect(() => {
+    if (status) seen.current = status.transcript.length;
+  });
+  // Opening the chat lands on the newest line at once; after that, new lines glide into view.
   // Braces matter: newer browsers return a Promise from scrollIntoView, and React would call it as the cleanup.
   useEffect(() => {
-    end.current?.scrollIntoView({ block: 'end' });
+    const first = shownTab.current !== tab;
+    shownTab.current = tab;
+    end.current?.scrollIntoView({ block: 'end', behavior: first ? 'instant' : 'smooth' });
   }, [lines, thinking, tab]);
 
   // The card under the chat grows and shrinks (an invite, Accept, the keyboard): keep the newest line in view.
@@ -317,7 +360,7 @@ function Chat({ agentId }: { agentId: string }) {
           </>
         ) : (
           <section className="conn">
-            <div className="avatar xl"><Pebble mood="thinking" size={164} /></div>
+            <div className="avatar xl"><Pebble mood="sleepy" size={164} /></div>
             <h2>Waking up your agent…</h2>
           </section>
         )}
@@ -326,13 +369,16 @@ function Chat({ agentId }: { agentId: string }) {
   }
 
   const m = status.match;
-  const accept = (yes: boolean) => run(call(AGENTS, `/users/${agentId}/accept`, { accept: yes }));
+  const accept = (yes: boolean) => {
+    buzz(yes ? [10, 40, 18] : 8);
+    run(call(AGENTS, `/users/${agentId}/accept`, { accept: yes }));
+  };
   const leave = () => m && confirm('Leave this challenge?') && run(call(API, `/matches/${m.match_id}/leave`, { agent_id: agentId }));
 
   return (
     <main className="app chat">
       <header className="topbar">
-        <div className="avatar"><Pebble size={50} /></div>
+        <div className="avatar"><Pebble mood={moodOf(status, thinking, lost || !online)} size={50} /></div>
         <div className="who"><b>Pebble</b><span>Your agent{status.name ? ` · ${status.name}` : ''}</span></div>
         <button className="icon-btn" aria-label="Menu" aria-expanded={menu} onClick={() => setMenu(true)}><Icon name="menu" size={22} /></button>
       </header>
@@ -354,10 +400,25 @@ function Chat({ agentId }: { agentId: string }) {
       ) : (
         <>
           <section className="transcript" aria-live="polite">
-            {status.transcript.map((line, i) => (
-              <p key={i} className={`bubble ${line.role}`}>{line.text}</p>
-            ))}
-            {thinking && <p className="bubble typing" aria-label="Pebble is typing"><i /><i /><i /></p>}
+            {status.transcript.map((line, i) => {
+              // Like any messenger: Pebble's face sits by the last of its bubbles in a row. Updates are Pebble too,
+              // passing on news (from the Coordinator or about your own taps), so they share the face.
+              const lastOfRun = (status.transcript[i + 1]?.role ?? 'user') === 'user';
+              return (
+                <div key={i} className={`msg ${line.role}${i < settled ? ' settled' : ''}`}>
+                  {line.role !== 'user' && (
+                    <span className="mini" aria-hidden="true">{lastOfRun && !(thinking && i === lines - 1) && <Pebble decorative size={30} />}</span>
+                  )}
+                  <p className={`bubble ${line.role}`}>{line.text}</p>
+                </div>
+              );
+            })}
+            {thinking && (
+              <div className="msg agent">
+                <span className="mini" aria-hidden="true"><Pebble decorative mood="thinking" size={30} /></span>
+                <p className="bubble typing" aria-label="Pebble is typing"><i /><i /><i /></p>
+              </div>
+            )}
             <div ref={end} />
           </section>
 
@@ -386,13 +447,17 @@ function Chat({ agentId }: { agentId: string }) {
                 <p className="muted">How many people? Groups are 2 to 5.</p>
                 <div className="sizes" role="group" aria-label="Group size">
                   {SIZES.map(n => (
-                    <button key={n} aria-pressed={size === n} onClick={() => setSize(n)}><b>{n}</b><span>people</span></button>
+                    <button key={n} aria-pressed={size === n} onClick={() => { buzz(6); setSize(n); }}><b>{n}</b><span>people</span>{size === n && <Scribble />}</button>
                   ))}
                 </div>
                 <button
                   className="btn primary"
                   aria-disabled={!size}
-                  onClick={() => size && run(call(AGENTS, `/users/${agentId}/start`, { size }))}
+                  onClick={() => {
+                    if (!size) return;
+                    buzz(12);
+                    run(call(AGENTS, `/users/${agentId}/start`, { size }));
+                  }}
                 >
                   {size ? `Start a ${size}-person challenge` : 'Pick a size first'}
                 </button>
@@ -424,7 +489,10 @@ function Consent({ shared, onShare }: { shared: Shared; onShare: (yes: boolean) 
   ];
   return (
     <section className="card">
-      <CardHead eyebrow="Before we start" title="OK to share?" />
+      <div className="speaker">
+        <div className="avatar lg"><Pebble mood="shy" size={84} /></div>
+        <CardHead eyebrow="Before we start" title="OK to share?" />
+      </div>
       <div className="share-rows">
         {rows.map(([k, v]) => (
           <div key={k} className="share-row">
@@ -489,7 +557,7 @@ function MatchCard({ m, me, status, onAccept, onStart, onCancel, onLeave }: Matc
     return (
       <section className="card violet group">
         <CardHead eyebrow="Seats filled" tone="violet" title="Your group is full" />
-        <Seats seats={seatList} />
+        <Seats seats={seatList} mood="happy" />
         {meta}
         <div className="btn-row">
           <button className="btn" onClick={() => onAccept(false)}>Not now</button>
@@ -513,8 +581,8 @@ function MatchCard({ m, me, status, onAccept, onStart, onCancel, onLeave }: Matc
   if (m.state === 'confirmed') {
     return (
       <section className="card violet group">
-        <CardHead eyebrow="Locked in" tone="green" title="Everyone's in!" />
-        <Seats seats={seatList} mood="cheer" tight />
+        <CardHead eyebrow="Locked in" tone="green" title="It fits! Everyone's in." />
+        <Seats seats={seatList} mood="cheer" snap />
         {meta}
         <p className="line-ok"><Icon name="checkCircle" size={20} /><span>Everyone's in! Setting up your challenge…</span></p>
         <div className="progress"><div /></div>
@@ -542,7 +610,7 @@ function MatchCard({ m, me, status, onAccept, onStart, onCancel, onLeave }: Matc
           title={`${accepted} of ${seats} joined.`}
           sub={`Start with ${accepted}, or keep waiting for the rest.`}
         />
-        <Seats seats={seatList} />
+        <Seats seats={seatList} mood="thinking" />
         <button className="btn primary" onClick={onStart}>Start with {accepted}</button>
         <p className="muted small center">Seats still open are dropped.</p>
         <button className="btn" onClick={onCancel}>Call it off</button>
@@ -558,7 +626,7 @@ function MatchCard({ m, me, status, onAccept, onStart, onCancel, onLeave }: Matc
         <span className="eyebrow violet">Your group</span>
         <b>{joined} of {seats} joined</b>
       </div>
-      <Seats seats={seatList} />
+      <Seats seats={seatList} mood={m.state === 'inviting' ? 'thinking' : 'happy'} />
       {waitingOnOthers ? (
         <>
           <div className="marks">
@@ -590,10 +658,12 @@ function Flow({ match, me }: { match: Match | null; me: string }) {
       : match.state === 'pending'
         ? ['Seats filled.', 'Everyone still has to accept. First names appear once they all do.']
         : ['Everyone accepted.', 'Time to meet up and play.'];
+  const together = !!match && TOGETHER.includes(match.state);
+  const walrus: WalrusMood = !match ? 'happy' : match.state === 'inviting' ? 'thinking' : together ? 'cheer' : 'happy';
   return (
     <>
       <section className="card violet group">
-        {match ? <Seats seats={seatsFor(match, me)} mood={match.state === 'confirmed' ? 'cheer' : 'happy'} /> : <Seats seats={[{ state: 'you' }, { state: 'open' }, { state: 'open' }]} />}
+        {match ? <Seats seats={seatsFor(match, me)} mood={walrus} snap={together} /> : <Seats seats={[{ state: 'you' }, { state: 'open' }, { state: 'open' }]} />}
         <p className="center"><b>{note[0]}</b> <span className="muted">{note[1]}</span></p>
         <div className="marks">
           <span className="mark ok"><Icon name="check" size={14} />in</span>

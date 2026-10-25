@@ -3,9 +3,9 @@
 //   challenge, from the coordinator's per-person feed. Others are "Agent A, B…" until everyone accepts; anyone who
 //   says no or leaves drops off, so the picture ends up being your group.
 // - /?view=log (a presenter screen): everyone, from the full event stream (ws /ws/log).
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties } from 'react';
 import { API } from './config.ts';
-import { Icon } from './ui.tsx';
+import { Buddy, CREW, Icon, Walrus, type PebbleMood, type WalrusMood } from './ui.tsx';
 
 type LogEvent = { seq: number; ts: number; kind: string; text: string; data: Record<string, any> };
 type Status = 'pool' | 'asked' | 'yes' | 'no' | 'grouped' | 'accepted' | 'here' | 'done';
@@ -22,8 +22,12 @@ const STATUS_LABEL: Record<Status, string> = {
   pool: 'in the pool', asked: 'asked', yes: 'said yes', no: 'said no', grouped: 'in a group',
   accepted: 'accepted', here: "here ✓", done: 'done 🎉',
 };
-// Room for ~20 agents on the ring before their names collide.
-const SIZE = 600, MID = SIZE / 2, RING = 236;
+// Each agent's avatar shows how it's going (you're the seal; the others are the rest of the crew).
+const FACE: Record<Status, PebbleMood> = {
+  pool: 'sleepy', asked: 'thinking', yes: 'happy', no: 'sad', grouped: 'happy', accepted: 'cheer', here: 'excited', done: 'love',
+};
+// Room for ~20 agents on the ring before their names collide. Lines stop short of the walrus and the seals.
+const SIZE = 600, MID = SIZE / 2, RING = 236, FROM = 62, TO = RING - 30;
 
 // Back to the chat of the person who opened this screen: their agent comes in the link (each window is its own
 // person), else the one this browser remembers (the lobby's key). Without either, back to sign-in.
@@ -98,6 +102,7 @@ export default function LiveLog() {
   const [online, setOnline] = useState(false);
   const [labels, setLabels] = useState<Record<string, string>>({});
   const feedBox = useRef<HTMLElement>(null);
+  const clip = useId();
 
   const animate = (fresh: Pulse[]) => {
     if (!fresh.length) return;
@@ -187,11 +192,16 @@ export default function LiveLog() {
 
   const ids = Object.keys(board.agents);
   const label = (id: string) => labels[id] ?? title(id);
-  const initials = (id: string) => (label(id).startsWith('Agent ') ? label(id).slice(6) : label(id).slice(0, 3));
-  const pos = (id: string) => {
-    const i = ids.indexOf(id), a = (i / Math.max(ids.length, 1)) * 2 * Math.PI - Math.PI / 2;
-    return { x: MID + RING * Math.cos(a), y: MID + RING * Math.sin(a) };
-  };
+  // Everything on the ring is placed by turning around the walrus, so when someone joins or leaves the others glide
+  // round to their new spots instead of jumping.
+  const angle = (id: string) => (ids.indexOf(id) / Math.max(ids.length, 1)) * 360 - 90;
+  const spin = (id: string) => `translate(${MID}px, ${MID}px) rotate(${angle(id)}deg)`;
+  const groups = Object.values(board.groups);
+  const hub: WalrusMood = board.considering.length
+    ? 'thinking'
+    : groups.some(g => g.state === 'cancelled') && !groups.some(g => ['confirmed', 'playing', 'done'].includes(g.state))
+      ? 'sorry'
+      : groups.some(g => ['confirmed', 'playing', 'done'].includes(g.state)) ? 'cheer' : 'happy';
 
   return (
     <main className="app wide">
@@ -207,34 +217,37 @@ export default function LiveLog() {
 
       <div className="log-split">
         <section className="card violet">
-          <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="net" role="img" aria-label="Agents around the coordinator">
-            {ids.map(id => {
-              const p = pos(id);
-              return <line key={id} x1={MID} y1={MID} x2={p.x} y2={p.y} className="spoke" />;
-            })}
+          <svg viewBox={`0 0 ${SIZE} ${SIZE}`} className="net" role="img" aria-label="Agents around the coordinator" style={{ '--from': `${FROM}px`, '--to': `${TO}px` } as CSSProperties}>
+            <defs><clipPath id={clip}><circle r="24" /></clipPath></defs>
+            {ids.map(id => <line key={id} x1={FROM} y1="0" x2={TO} y2="0" className={`spoke ${board.agents[id]}`} style={{ transform: spin(id) }} />)}
             {/* No lines between agents: every agent talks to the coordinator only. A group shows in its nodes' state. */}
-            {pulses.map(p => {
-              const a = pos(p.agent);
-              const path = p.out ? `M${MID},${MID} L${a.x},${a.y}` : `M${a.x},${a.y} L${MID},${MID}`;
-              return (
-                <circle key={p.id} r="6" className={p.out ? 'pulse out' : 'pulse'}>
-                  <animateMotion dur="0.9s" path={path} fill="freeze" />
-                </circle>
-              );
-            })}
+            {pulses.map(p => (
+              <g key={p.id} style={{ transform: spin(p.agent) }}>
+                <circle r="6" className={p.out ? 'pulse out' : 'pulse'} />
+              </g>
+            ))}
             <g className="hub">
-              <circle cx={MID} cy={MID} r="46" />
-              <text x={MID} y={MID - 4}>Coordinator</text>
-              <text x={MID} y={MID + 14} className="sub">{board.pickedBy ? `picked by ${board.pickedBy}` : 'waiting'}</text>
+              <circle cx={MID} cy={MID} r="60" className="halo" />
+              <Walrus mood={hub} size={104} x={MID - 52} y={MID - 56} />
+              <text x={MID} y={MID + 72}>Coordinator</text>
+              <text x={MID} y={MID + 88} className="sub">{board.pickedBy ? `picked by ${board.pickedBy}` : 'waiting'}</text>
             </g>
-            {ids.map(id => {
-              const p = pos(id), s = board.agents[id];
+            {ids.map((id, i) => {
+              const s = board.agents[id], a = angle(id);
+              const mine = id === ME || label(id) === 'You';
+              // On the top half the line from Wally comes in from below, so the name goes above the face.
+              const up = Math.sin((a * Math.PI) / 180) < -0.3;
               return (
-                <g key={id} className={`node ${s}`}>
-                  <circle cx={p.x} cy={p.y} r="24" />
-                  <text x={p.x} y={p.y + 5}>{initials(id)}</text>
-                  <text x={p.x} y={p.y + 42} className="name">{label(id)}</text>
-                  <text x={p.x} y={p.y + 56} className="sub">{STATUS_LABEL[s]}</text>
+                <g key={id} className={`node ${s}`} style={{ transform: `${spin(id)} translate(${RING}px, 0px) rotate(${-a}deg)` }}>
+                  <g className="pop">
+                    <circle r="27" className="ring" />
+                    <g clipPath={`url(#${clip})`}>
+                      <circle r="24" className="porthole" />
+                      <Buddy decorative {...(mine ? { animal: 'seal' as const } : CREW[i % CREW.length])} mood={FACE[s]} size={58} x={-29} y={-26} />
+                    </g>
+                  </g>
+                  <text y={up ? -51 : 46} className="name">{label(id)}</text>
+                  <text y={up ? -36 : 61} className="sub">{STATUS_LABEL[s]}</text>
                 </g>
               );
             })}

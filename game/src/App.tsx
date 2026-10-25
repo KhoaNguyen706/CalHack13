@@ -6,12 +6,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useReducer, useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { reducers, tables } from './module_bindings';
 import { AGENTS, API, openedKey } from './config.ts';
-import { CardHead, Icon, MeetCard, Pebble, SignScreen, Walrus, type Meet } from './ui.tsx';
+import { buzz, CardHead, Confetti, Icon, MeetCard, Pebble, SignScreen, Walrus, type Meet, type PebbleMood } from './ui.tsx';
 
 const params = new URLSearchParams(location.search);
 const MATCH = params.get('match') ?? '';
 const AGENT = params.get('agent') ?? '';
 const CHAT = `?agent=${AGENT}`;
+const VIEW = `krew-view:${MATCH}`;
 
 // You've seen this challenge: from now on the chat lets you stay when you tap "<".
 if (MATCH) {
@@ -81,15 +82,31 @@ function useMinutesLeft(startedAtMs: number | undefined, timerMin: number | unde
 }
 
 // The challenge as everyone may see it (title, goal, where to meet, the picture's cuts, who holds which piece), from
-// the agents service.
+// the agents service. The last copy is kept for this tab, so coming back to the game shows it at once.
 function useChallenge() {
-  const [view, setView] = useState<View>();
+  const [view, setView] = useState<View | undefined>(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem(VIEW) ?? 'null') ?? undefined;
+    } catch {
+      return undefined;
+    }
+  });
   useEffect(() => {
-    let live = true;
+    let live = true, last = '';
     const tick = () =>
       fetch(`${AGENTS}/challenges/${MATCH}`)
         .then(r => (r.ok ? r.json() : null))
-        .then(v => live && v && setView(v))
+        .then(v => {
+          const text = JSON.stringify(v);
+          if (!live || !v || text === last) return;
+          last = text;
+          setView(v);
+          try {
+            sessionStorage.setItem(VIEW, text);
+          } catch {
+            // private mode
+          }
+        })
         .catch(() => {});
     tick();
     const id = setInterval(tick, 3000);
@@ -173,12 +190,35 @@ function Top({ heading, minutes }: { heading: string; minutes?: number }) {
   );
 }
 
-function Waiting({ text }: { text: string }) {
+// Pebble pipes up for a moment when something happens: a friend arrives, everyone's here, the photo counts (or not).
+type Reaction = { mood: PebbleMood; text: string; id: number };
+
+function useReaction() {
+  const [reaction, setReaction] = useState<Reaction>();
+  useEffect(() => {
+    if (!reaction) return;
+    const t = setTimeout(() => setReaction(undefined), 2800);
+    return () => clearTimeout(t);
+  }, [reaction]);
+  return [reaction, (mood: PebbleMood, text: string) => setReaction({ mood, text, id: Date.now() })] as const;
+}
+
+function Toast({ reaction }: { reaction?: Reaction }) {
+  if (!reaction) return null;
+  return (
+    <div key={reaction.id} className="toast" role="status">
+      <span className="avatar"><Pebble decorative mood={reaction.mood} size={44} /></span>
+      <span>{reaction.text}</span>
+    </div>
+  );
+}
+
+function Waiting({ text, heading = 'Challenge', mood = 'thinking' }: { text: string; heading?: string; mood?: PebbleMood }) {
   return (
     <Shell>
-      <Top heading="Challenge" />
+      <Top heading={heading} />
       <section className="conn">
-        <div className="avatar xl"><Pebble mood="thinking" size={164} /></div>
+        <div className="avatar xl"><Pebble mood={mood} size={164} /></div>
         <h2>{text}</h2>
       </section>
     </Shell>
@@ -200,7 +240,10 @@ export default function App() {
   const [error, setError] = useState('');
   const [sign, setSign] = useState(false); // the group's sign, full screen
   const [notQuite, setNotQuite] = useState(''); // why the last group photo didn't pass
+  const [reaction, react] = useReaction();
   const joined = useRef(false);
+  const arrived = useRef<Set<string> | null>(null);
+  const lastState = useRef('');
 
   const round = rounds[0];
   const myWord = myKeys.find(k => k.matchId === MATCH)?.key;
@@ -220,6 +263,27 @@ export default function App() {
     joined.current = true;
     join({ matchId: MATCH, agentId: AGENT }).catch(e => setError(String(e?.message ?? e)));
   }, [isActive, round, join]);
+
+  // Someone else just tapped We're here: say so, by name (everyone has accepted by now).
+  useEffect(() => {
+    if (!seats.length) return;
+    const now = new Set(seats.filter(s => s.checkedIn).map(s => String(s.seatId)));
+    if (arrived.current) {
+      const fresh = seats.find(s => s.checkedIn && !arrived.current!.has(String(s.seatId)) && s.seatId !== mySeat?.seatId);
+      if (fresh) react('excited', `${nameOf(fresh.agentId)} is here!`);
+    }
+    arrived.current = now;
+  }, [seats]);
+
+  // Everyone's here: off to the spot.
+  useEffect(() => {
+    if (!round) return;
+    if (lastState.current === 'playing' && round.state === 'unlocked') {
+      react('cheer', "Everyone's here. Let's go!");
+      buzz([12, 50, 12]);
+    }
+    lastState.current = round.state;
+  }, [round?.state]);
 
   const run = (p: Promise<unknown>) => {
     setError('');
@@ -241,16 +305,22 @@ export default function App() {
       const out = await post<{ passed: boolean; reason: string }>(`${AGENTS}/challenges/${MATCH}/check`, {
         step: photoStep, agent_id: AGENT, image_base64: image, media_type: 'image/jpeg',
       });
-      if (!out.passed) return setNotQuite(out.reason);
+      if (!out.passed) {
+        buzz(30);
+        react('oops', 'Not quite. Try another photo.');
+        return setNotQuite(out.reason);
+      }
     }
     setNotQuite('');
     const { path } = await post<{ path: string }>(`${AGENTS}/photos`, { match_id: MATCH, agent_id: AGENT, image_base64: image });
     await submitPhoto({ matchId: MATCH, url: AGENTS + path });
+    buzz([12, 60, 12, 60, 24]);
   };
 
-  if (!MATCH || !AGENT) return <Waiting text="Open the game link from your agent." />;
-  if (!isActive) return <Waiting text="Connecting…" />;
-  if (!round) return <Waiting text="Waiting for your round to start…" />;
+  const heading = challenge?.title ?? 'Challenge';
+  if (!MATCH || !AGENT) return <Waiting text="Open the game link from your agent." mood="oops" />;
+  if (!isActive) return <Waiting text="Connecting…" heading={heading} mood="sleepy" />;
+  if (!round) return <Waiting text="Waiting for your round to start…" heading={heading} />;
 
   // Called off: too few people were left. The Coordinator says sorry and your agent keeps looking.
   if (round.state === 'cancelled') {
@@ -274,8 +344,12 @@ export default function App() {
     return (
       <Shell>
         <Top heading="All done" />
-        <section className="card">
-          <CardHead eyebrow="Challenge done" tone="green" title="You did it!" sub={others.length ? `With ${others.join(' and ')}` : undefined} />
+        <Celebrate />
+        <section className="card done">
+          <div className="speaker">
+            <div className="avatar lg"><Pebble mood="cheer" size={84} /></div>
+            <CardHead eyebrow="Challenge done" tone="green" title="You did it!" sub={others.length ? `With ${others.join(' and ')}` : undefined} />
+          </div>
           {round.answer && <p>It was <b>{round.answer}</b>.</p>}
           {photos[0] && <img className="group-photo" src={photos[0].url} alt="Your group photo" />}
           {pose && (
@@ -367,15 +441,36 @@ export default function App() {
       {round.state === 'playing' && (mySeat?.checkedIn ? (
         <div className="status big"><Icon name="clock" size={20} /><span>Waiting for the others…</span></div>
       ) : (
-        <button className="btn primary big" disabled={!mySeat} onClick={() => run(checkIn({ matchId: MATCH }))}>We're here</button>
+        <button className="btn primary big" disabled={!mySeat} onClick={() => { buzz(14); run(checkIn({ matchId: MATCH })); }}>We're here</button>
       ))}
       {unlocked && <Camera big label={notQuite ? 'Try another photo' : 'Add the group photo'} busy="Checking…" onPhoto={f => run(groupPhoto(f))} />}
 
       <button className="link" onClick={() => run(leave())}>Leave challenge</button>
       {error && <p className="error">{error}</p>}
+      <Toast reaction={reaction} />
     </Shell>
   );
 }
+
+// Confetti the first time this phone sees the challenge finished (not again when you come back to rate it).
+function Celebrate() {
+  const [first] = useState(() => {
+    try {
+      if (sessionStorage.getItem(`krew-done:${MATCH}`)) return false;
+      sessionStorage.setItem(`krew-done:${MATCH}`, '1');
+    } catch {
+      // private mode: celebrate anyway
+    }
+    return true;
+  });
+  useEffect(() => {
+    if (first) buzz([16, 70, 16, 70, 30]);
+  }, [first]);
+  return first ? <Confetti /> : null;
+}
+
+// Pebble's face follows your stars while you pick them.
+const FACE_FOR_RATING: PebbleMood[] = ['happy', 'sad', 'oops', 'happy', 'cheer', 'love'];
 
 // Rating, meet again? and OK to share the photo? Ratings stay private; a "meet again" match shows only when both
 // said yes; the photo can be shared only once everyone said OK.
@@ -421,7 +516,10 @@ function EndScreen({ photoUrl }: { photoUrl?: string }) {
     const mine = summary.my_matches;
     return (
       <section className="card">
-        <CardHead eyebrow="Thanks!" title={mine.length ? 'You want to meet again' : 'Your answers are in'} />
+        <div className="speaker">
+          <div className="avatar lg"><Pebble mood={mine.length ? 'love' : 'happy'} size={84} /></div>
+          <CardHead eyebrow="Thanks!" title={mine.length ? 'You want to meet again' : 'Your answers are in'} />
+        </div>
         {mine.length > 0 ? (
           <p>
             {mine.length === 1
@@ -446,12 +544,15 @@ function EndScreen({ photoUrl }: { photoUrl?: string }) {
     <section className="card">
       <div className="question">
         <div className="split-head">
-          <p><b>How was it?</b></p>
+          <div className="speaker">
+            <div className="avatar"><Pebble mood={FACE_FOR_RATING[rating]} size={50} /></div>
+            <p><b>How was it?</b></p>
+          </div>
           <span className="private"><Icon name="lock" size={14} />Private</span>
         </div>
         <div className="stars" role="radiogroup" aria-label="Rating">
           {[1, 2, 3, 4, 5].map(n => (
-            <button key={n} className={n <= rating ? 'on' : ''} role="radio" aria-checked={n === rating} aria-label={`${n} of 5`} onClick={() => setRating(n)}>
+            <button key={n} className={n <= rating ? 'on' : ''} style={{ '--i': n } as React.CSSProperties} role="radio" aria-checked={n === rating} aria-label={`${n} of 5`} onClick={() => { buzz(6); setRating(n); }}>
               <Icon name="star" size={36} />
             </button>
           ))}

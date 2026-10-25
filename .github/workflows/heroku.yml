@@ -1,0 +1,69 @@
+# Every push to main rebuilds the backend that changed on Heroku, from that exact commit: the repo goes up as one
+# tarball (Heroku's Sources API, so it works for a private repo too) and the monorepo buildpack picks the app's folder
+# (APP_BASE). The web app deploys itself on Vercel. Needs one repo secret, HEROKU_API_KEY (see README).
+name: Deploy backends to Heroku
+
+on:
+  push:
+    branches: [main]
+    paths: ['coordinator/**', 'agents/**', '.github/workflows/heroku.yml']
+  workflow_dispatch: # "Run workflow" in the Actions tab redeploys both
+
+concurrency:
+  group: heroku-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { app: aicoordinator, dir: coordinator }
+          - { app: aicoordinator-agents, dir: agents }
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Did ${{ matrix.dir }} change?
+        id: changed
+        run: |
+          # A manual run, or a push we can't diff (first push of a branch), deploys anyway.
+          if [ "${{ github.event_name }}" != push ] \
+            || ! git diff --quiet "${{ github.event.before }}" "${{ github.sha }}" -- ${{ matrix.dir }} .github/workflows/heroku.yml 2>/dev/null; then
+            echo "deploy=yes" >> "$GITHUB_OUTPUT"
+          else
+            echo "No changes in ${{ matrix.dir }}/, skipping ${{ matrix.app }}."
+          fi
+
+      - name: Build ${{ matrix.app }} on Heroku
+        if: steps.changed.outputs.deploy == 'yes'
+        env:
+          HEROKU_API_KEY: ${{ secrets.HEROKU_API_KEY }}
+          APP: ${{ matrix.app }}
+        run: |
+          if [ -z "$HEROKU_API_KEY" ]; then
+            echo "::warning::HEROKU_API_KEY isn't set in the repo's secrets yet, so nothing was deployed."
+            exit 0
+          fi
+          api() { curl -fsS -H "Authorization: Bearer $HEROKU_API_KEY" -H "Accept: application/vnd.heroku+json; version=3" -H "Content-Type: application/json" "$@"; }
+
+          git archive --format=tar.gz -o source.tgz HEAD
+          source=$(api -X POST https://api.heroku.com/sources)
+          curl -fsS -X PUT -H "Content-Type:" --data-binary @source.tgz "$(jq -r .source_blob.put_url <<<"$source")"
+
+          build=$(api -X POST "https://api.heroku.com/apps/$APP/builds" \
+            -d "$(jq -n --arg url "$(jq -r .source_blob.get_url <<<"$source")" --arg v "$GITHUB_SHA" '{source_blob: {url: $url, version: $v}}')")
+          id=$(jq -r .id <<<"$build")
+          # Heroku's build log, live, right here in the job.
+          curl -fsS "$(jq -r .output_stream_url <<<"$build")" || true
+
+          for _ in $(seq 1 90); do
+            status=$(api "https://api.heroku.com/apps/$APP/builds/$id" | jq -r .status)
+            [ "$status" != pending ] && break
+            sleep 5
+          done
+          echo "$APP build $id: $status"
+          [ "$status" = succeeded ]

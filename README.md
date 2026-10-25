@@ -109,6 +109,16 @@ dyno. Config Vars:
 
 Seed the demo people: `curl -X POST "https://<agents-app>.herokuapp.com/contexts/seed?shift_to_now=true"`.
 
+**Auto-deploy.** `.github/workflows/heroku.yml` rebuilds the coordinator and/or agents app on every push to `main`
+that touches `coordinator/` or `agents/` (Actions tab → *Deploy backends to Heroku* → *Run workflow* redeploys both).
+It needs one repo secret, a long-lived Heroku token, set once:
+
+```bash
+heroku authorizations:create -d "GitHub Actions deploy" --short | gh secret set HEROKU_API_KEY
+```
+
+The app names live in the workflow's `matrix`; change them there if yours differ.
+
 Heroku's disk is wiped when a dyno restarts (at least once a day), so both SQLite files start empty again: seed
 again after a restart. Hosts with volumes (Railway: mount `/data`, set `COORDINATOR_DB=/data/coordinator.db` and
 `AGENTS_DB=/data/agents.db`) keep them; the Dockerfiles work there unchanged.

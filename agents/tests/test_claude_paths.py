@@ -129,7 +129,7 @@ def test_claude_picks_the_spot_and_checks_the_photo(setup):
     assert {"agent_id": "jess", "name": "Jess", "interests": ["campus"], "skills": []} in sent["players"]
     assert sent["spot"]["name"] == spot.name and "spots" not in sent  # Claude only writes the hints for this spot
     apify = next(s for s in client.app.state.svc.spots if s.id == "apify_booth")  # only verified booths are spots
-    assert {s.id for s in client.app.state.svc.spots} == {"weeping_ladies", "rotunda", "lagoon", "apify_booth"}
+    assert {s.id for s in client.app.state.svc.spots} == {"weeping_ladies", "rotunda", "lagoon", "spacetime_booth", "apify_booth"}
     assert "near the snacks" in apify.about and "apify" in apify.giveaways
 
     match.update(state="confirmed", accepted=["phong", "jess"], challenge=challenge)

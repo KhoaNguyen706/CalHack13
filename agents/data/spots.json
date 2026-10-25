@@ -40,5 +40,25 @@
       "It's right in front of the big dome.",
       "It used to be a mudhole."
     ]
+  },
+  {
+    "id": "spacetime_booth",
+    "name": "the SpacetimeDB booth",
+    "area": "Palace of Fine Arts",
+    "giveaways": [
+      "spacetimedb",
+      "spacetime",
+      "clockwork labs",
+      "clockwork"
+    ],
+    "about": "The SpacetimeDB sponsor booth inside Cal Hacks. The people there wear neon green. Their table sits under a pillar with a red hose and an arrow on it. Their database is also the server, so every player sees changes live: it runs this very game.",
+    "check": "the SpacetimeDB sponsor booth: people in neon green, or a table under a pillar with a red hose and an arrow",
+    "hints": [
+      "Look for people wearing neon green.",
+      "Their table is right under a pillar.",
+      "There's a red hose on that pillar.",
+      "An arrow is on the pillar too.",
+      "It's a sponsor booth, and their database is running this game right now."
+    ]
   }
 ]

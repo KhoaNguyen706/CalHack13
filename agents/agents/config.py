@@ -49,6 +49,9 @@ class Settings:
     # Where every new group meets first, e.g. "the rotunda steps, facing the lagoon". Unset: Claude picks a spot
     # from the place facts and booths, else the venue's main entrance.
     meeting_point: str = _env("MEETING_POINT")
+    # For a live demo: every new challenge sends the group to this one spot (an id from data/spots.json, e.g.
+    # "spacetime_booth"). Unset: a spot is picked at random per match.
+    demo_spot: str = _env("DEMO_SPOT")
     # Its place on the map, for the in-app map and "Directions". Unset: the venue (EVENT_LOCATION, EVENT_CITY) looked up
     # on OpenStreetMap. COORDS is "lat,lng", e.g. "37.8029,-122.4484"; ADDRESS is a street address.
     meeting_point_address: str = _env("MEETING_POINT_ADDRESS")

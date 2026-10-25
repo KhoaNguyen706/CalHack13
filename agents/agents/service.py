@@ -128,6 +128,8 @@ class AgentsService:
             for b in booths or []
             if b.verified and b.area.strip().casefold() == here
         ]
+        if settings.demo_spot:  # a live demo sends every group to one spot, if it's known here
+            self.spots = [s for s in self.spots if s.id == settings.demo_spot] or self.spots
         self.poses = poses or []  # hand-picked; pose_search finds fresh ones with Apify
         self.pose_search = pose_search
         self._stand_in_free: dict[str, str] = {}  # the window each stand-in last checked in with

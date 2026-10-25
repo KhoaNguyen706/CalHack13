@@ -34,8 +34,8 @@ Test the MVP on one laptop with two people: start with `GROUP_SIZE=2 docker comp
 1. Open http://localhost:5173 in two windows. Log in as a different person in each, e.g. `anna` (Riddles) and
    `ben` (Finding the way), with overlapping free time.
 2. In one window, tap **Find my group**. Both windows get the plan question; tap **Yes** in each within 20 s.
-3. Tap **Accept** in both. Each window opens its game page with a secret word and a piece of a meme picture: tap
-   "We're here" in both, then add the group photo.
+3. Tap **Accept** in both. Each window opens its game page with a hint for the spot: tap "We're here" in both, and
+   each gets its part of the pose picture. Then add the group photo.
 
 Don't seed personas for this: the seeded bots would get paired with you.
 

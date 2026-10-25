@@ -53,7 +53,7 @@ def test_all_accept_confirms_and_attaches_challenge(client, demo_match):
 
     match = wait_for(lambda: (m := client.get(f"/matches/{mid}").json())["challenge"] and m)
     keys = match["challenge"]["round"]["keys"]
-    assert set(keys) == {"linh", "marcus", "priya"} and len(set(keys.values())) == 3  # a different word each
+    assert set(keys) == {"linh", "marcus", "priya"} and len(set(keys.values())) == 3  # a different hint each
     assert any(e["text"].endswith("→ CONFIRMED") for e in client.get("/log").json())
 
     assert client.post(f"/matches/{mid}/state", json={"state": "done"}).status_code == 409

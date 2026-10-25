@@ -21,7 +21,7 @@ invitee → watch `/ws/log`.
 | `ANTHROPIC_API_KEY` | none | Enables the Claude match pick. Without it, matching uses the top rule score. |
 | `MATCH_WITH_CLAUDE` | `1` | `0` forces rule-only matching (handy for rehearsals). |
 | `MATCH_MODEL` | `claude-opus-5-5` | Model for the pick. |
-| `CHALLENGE_DESIGNER_URL` | none | Agents team's challenge designer. Unset or failing → a built-in round whose words point to the Apify booth. |
+| `CHALLENGE_DESIGNER_URL` | none | Agents team's challenge designer. Unset or failing → a built-in round whose hints point to the Apify booth. |
 | `REPLY_TIMEOUT_S` | `20` | How long the broker waits for an agent before counting "no". |
 | `GROUP_SIZE` | `3` | Only for `/matching/run` (testing). With `POST /challenges` the host picks the size. |
 | `COORDINATOR_DB` | `coordinator.db` | SQLite file. Agents and matches survive restarts. |

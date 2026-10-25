@@ -196,16 +196,16 @@ def test_challenge_status_and_photo_checks(client, coord):
     members = [{"agent_id": "phong", "interests": ["puzzles"]}, {"agent_id": "jess", "interests": ["campus"]}]
     challenge = client.post("/challenge", json={"match": match, "members": members}).json()
     rnd = challenge["round"]
-    assert rnd["designed_by"] == "hand-written words (Claude off)" and rnd["title"] == "Spot & Pose"
+    assert rnd["designed_by"] == "hand-written hints (Claude off)" and rnd["title"] == "Spot & Pose"
     match.update(state="confirmed", accepted=["phong", "jess"], challenge=challenge)
 
     status = client.get("/users/jess").json()
     assert status["my_part"] == rnd["keys"]["jess"] and status["my_part"] != rnd["keys"]["phong"]
-    assert "keys" not in status["challenge"] and status["challenge"]["pieces"] == rnd["pieces"]  # others' words hidden
+    assert "keys" not in status["challenge"] and status["challenge"]["pieces"] == rnd["pieces"]  # others' hints hidden
     assert status["challenge"]["steps"] == [{"id": "photo", "task": "Group photo at the spot, doing the pose"}]  # no check
     assert status["progress"] == {"steps": [{**status["challenge"]["steps"][0], "passed": False, "reason": None}], "done": False}
     tick(client)
-    word = f"Your word: “{status['my_part']}”. Your piece of the picture is on the game page."
+    word = f"Your hint: “{status['my_part']}”"
     meet = status["challenge"]["meet"]
     assert meet["spot"] == "the main entrance of the Palace of Fine Arts" and meet["sign"]  # public, like the pieces
     hello = f"Everyone's in! You're meeting Phong. Meet at {meet['spot']}. Look for phones showing {meet['emoji']} {meet['sign']}"

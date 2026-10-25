@@ -1567,9 +1567,9 @@ details[open].card summary::after {
   animation: arrive 500ms var(--ease) both;
 }
 
-/* Your piece of the meme picture: a tall strip, cropped from the whole image, like a torn-off photo. */
-.piece {
-  align-self: center;
+/* The pose picture, like a printed photo: your part shows, the others' parts are covered with who has them. */
+.pose-frame {
+  position: relative;
   overflow: hidden;
   border-radius: 12px 14px 11px 13px / 13px 11px 14px 12px;
   border: 6px solid #fbf8f1;
@@ -1578,16 +1578,44 @@ details[open].card summary::after {
   animation: arrive 420ms var(--ease) both;
 }
 
-.piece img {
+.pose-frame img {
   display: block;
-  max-width: none;
+  width: 100%;
 }
 
-.shared {
+.pose-cover,
+.pose-mine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 8px 4px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
 }
+
+.pose-cover {
+  background: var(--field);
+  border-left: 2px dashed var(--chip-border);
+  border-right: 2px dashed var(--chip-border);
+  color: var(--muted);
+  align-items: center;
+}
+
+.pose-mine {
+  box-shadow: inset 0 0 0 3px var(--accent);
+}
+
+.pose-mine span {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
 
 .stars {
   display: flex;

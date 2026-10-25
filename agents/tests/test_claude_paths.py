@@ -10,7 +10,7 @@ from anthropic.types import Message
 from fastapi.testclient import TestClient
 
 from agents.config import Settings
-from agents.designer import Word, Words
+from agents.designer import Hint, Hints
 from agents.main import create_app
 from agents.models import Answer
 from agents.vision import Verdict
@@ -52,7 +52,7 @@ def web(request: httpx.Request) -> httpx.Response:
     return httpx.Response(404)
 
 
-WORDS = {"phong": "look up", "jess": "stone"}
+HINTS = {"phong": "Look up at the tall columns.", "jess": "It's made of stone."}
 
 
 @pytest.fixture
@@ -72,7 +72,7 @@ def setup(tmp_path):
         ],
         parsed={
             Answer: Answer(answer="no", note="prefers smaller groups"),
-            Words: Words(words=[Word(agent_id=a, word=w) for a, w in WORDS.items()]),
+            Hints: Hints(hints=[Hint(agent_id=a, hint=h) for a, h in HINTS.items()]),
             Verdict: Verdict(passed=True, reason="That's the spot, and you're both pointing. Nice!"),
         },
     )
@@ -122,12 +122,12 @@ def test_claude_picks_the_spot_and_checks_the_photo(setup):
     members = [{"agent_id": "phong", "interests": ["puzzles"]}, {"agent_id": "jess", "interests": ["campus"]}]
     challenge = client.post("/challenge", json={"match": match, "members": members}).json()
     rnd = challenge["round"]
-    assert rnd["keys"] == WORDS and rnd["designed_by"] == "Claude + built-in place info"
+    assert rnd["keys"] == HINTS and rnd["designed_by"] == "Claude + built-in place info"
     spot = next(s for s in client.app.state.svc.spots if s.id == rnd["spot"])
     assert rnd["answer"].startswith(f"{spot.name} · ") and len(rnd["pose"]["cuts"]) == 3  # a 2-person meme
     sent = json.loads(claude.requests[-1]["messages"][0]["content"])
     assert {"agent_id": "jess", "name": "Jess", "interests": ["campus"], "skills": []} in sent["players"]
-    assert sent["spot"]["name"] == spot.name and "spots" not in sent  # Claude only writes the words for this spot
+    assert sent["spot"]["name"] == spot.name and "spots" not in sent  # Claude only writes the hints for this spot
     apify = next(s for s in client.app.state.svc.spots if s.id == "apify_booth")  # only verified booths are spots
     assert {s.id for s in client.app.state.svc.spots} == {"weeping_ladies", "rotunda", "lagoon", "apify_booth"}
     assert "near the snacks" in apify.about and "apify" in apify.giveaways

@@ -1,7 +1,7 @@
 // Game page for one player: /?match=<match_id>&agent=<agent_id>
-// Spot & Pose: your secret word and your piece of a meme picture. The group meets, shares them to work out the spot and
-// the pose, taps "We're here", then takes one group photo there doing the pose, which the AI checks. Then the end
-// screen (rating, meet again?, OK to share the photo?).
+// Spot & Pose: meet your group, then put everyone's hints together to find the spot. When you're all there and have
+// tapped "We're here", each phone shows its part of one meme picture: together the parts show the pose. One group
+// photo there doing the pose, which the AI checks. Then the end screen (rating, meet again?, OK to share the photo?).
 import { useEffect, useRef, useState } from 'react';
 import { useReducer, useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { reducers, tables } from './module_bindings';
@@ -23,9 +23,7 @@ if (MATCH) {
   }
 }
 
-const PIECE_HEIGHT = 300; // px: a piece is a tall strip, so its height sets its size
-
-// The picture, and where it's cut: piece i runs from cuts[i] to cuts[i + 1] (fractions of the width).
+// The picture, and where it's cut: part i runs from cuts[i] to cuts[i + 1] (fractions of the width).
 type Pose = { image: string; cuts: number[]; top?: number };
 type View = {
   state: string;
@@ -36,8 +34,8 @@ type View = {
     steps?: { id: string; task: string }[];
     meet?: Meet | null;
     pose?: Pose | null;
-    pieces?: Record<string, number> | null; // agent_id -> their piece
-    shared?: Record<string, string> | null; // agent_id -> the word of someone who left
+    pieces?: Record<string, number> | null; // agent_id -> their part of the picture
+    shared?: Record<string, string> | null; // agent_id -> the hint of someone who left
   } | null;
 };
 type Summary = { waiting_for: string[]; mutual_meet_again: boolean; my_matches: string[]; share_ok: boolean };
@@ -81,7 +79,7 @@ function useMinutesLeft(startedAtMs: number | undefined, timerMin: number | unde
   return Math.max(0, Math.ceil((startedAtMs + timerMin * 60_000 - now) / 60_000));
 }
 
-// The challenge as everyone may see it (title, goal, where to meet, the picture's cuts, who holds which piece), from
+// The challenge as everyone may see it (title, goal, where to meet, the picture's cuts, who holds which part), from
 // the agents service. The last copy is kept for this tab, so coming back to the game shows it at once.
 function useChallenge() {
   const [view, setView] = useState<View | undefined>(() => {
@@ -130,22 +128,24 @@ function useRatio(src: string) {
   return ratio;
 }
 
-// One piece of the pose picture: a strip of the whole image, cropped in the browser.
-function Piece({ pose, index }: { pose: Pose; index: number }) {
+// The whole pose picture with only some parts showing: yours (and those of people who left). The other parts are
+// covered with the name of who has them, so it's clear they're pieces of one picture.
+function PoseFrame({ pose, mine, shown, holders }: { pose: Pose; mine?: number; shown: number[]; holders: string[] }) {
   const ratio = useRatio(pose.image);
-  const x0 = pose.cuts[index] ?? 0;
-  const w = (pose.cuts[index + 1] ?? 1) - x0;
   const top = pose.top ?? 0;
-  if (ratio === null) return <p className="muted small">Couldn't load this piece of the picture.</p>;
-  if (ratio === undefined || w <= 0) return <p className="muted small">Loading the picture…</p>;
-  const aspect = w / (ratio * (1 - top)); // the piece's width / height
+  if (ratio === null) return <p className="muted small">Couldn't load the picture.</p>;
+  if (ratio === undefined) return <p className="muted small">Loading the picture…</p>;
+  const span = (i: number) => ({ left: `${pose.cuts[i] * 100}%`, width: `${(pose.cuts[i + 1] - pose.cuts[i]) * 100}%` });
   return (
-    <div className="piece" style={{ width: `min(100%, ${Math.round(PIECE_HEIGHT * aspect)}px)`, aspectRatio: `${aspect}` }}>
-      <img
-        src={pose.image}
-        alt="A piece of the picture"
-        style={{ width: `${100 / w}%`, marginLeft: `${(-x0 / w) * 100}%`, marginTop: `${((-top * ratio) / w) * 100}%` }}
-      />
+    <div className="pose-frame" style={{ aspectRatio: `${1 / (ratio * (1 - top))}` }}>
+      <img src={pose.image} alt="Your part of the pose" style={{ marginTop: `${-top * ratio * 100}%` }} />
+      {pose.cuts.slice(0, -1).map((_, i) =>
+        i === mine ? (
+          <div key={i} className="pose-mine" style={span(i)}><span>You</span></div>
+        ) : shown.includes(i) ? null : (
+          <div key={i} className="pose-cover" style={span(i)}><span>{holders[i] ?? 'Someone'}</span></div>
+        ),
+      )}
     </div>
   );
 }
@@ -246,7 +246,7 @@ export default function App() {
   const lastState = useRef('');
 
   const round = rounds[0];
-  const myWord = myKeys.find(k => k.matchId === MATCH)?.key;
+  const myHint = myKeys.find(k => k.matchId === MATCH)?.key;
   const mySeat = seats.find(s => identity && s.player?.isEqual(identity));
   const minutesLeft = useMinutesLeft(round?.startedAt.toDate().getTime(), round?.timerMin);
   const names = Object.fromEntries((view?.members ?? []).map(m => [m.agent_id, m.name]));
@@ -255,6 +255,8 @@ export default function App() {
   const pose = challenge?.pose;
   const pieces = challenge?.pieces ?? {};
   const shared = Object.entries(challenge?.shared ?? {});
+  const holders: string[] = [];
+  for (const [id, i] of Object.entries(pieces)) holders[i] = nameOf(id);
   const photoStep = challenge?.steps?.[0]?.id;
 
   // Claim this person's seat once the round exists.
@@ -275,11 +277,11 @@ export default function App() {
     arrived.current = now;
   }, [seats]);
 
-  // Everyone's here: off to the spot.
+  // Everyone's at the spot: the pose shows up.
   useEffect(() => {
     if (!round) return;
     if (lastState.current === 'playing' && round.state === 'unlocked') {
-      react('cheer', "Everyone's here. Let's go!");
+      react('cheer', "Everyone's here. Here's the pose!");
       buzz([12, 50, 12]);
     }
     lastState.current = round.state;
@@ -373,36 +375,33 @@ export default function App() {
     <Shell>
       <Top heading={challenge?.title ?? 'Challenge'} minutes={minutesLeft} />
 
-      {/* Until everyone's here: where to meet and the sign to hold up, before anything else. */}
+      {/* 1. Meet your group: where, and the sign to hold up. */}
       {meet && round.state === 'playing' && <MeetCard meet={meet} onShow={() => setSign(true)} />}
       {meet && sign && <SignScreen meet={meet} onClose={() => setSign(false)} />}
 
-      {myWord !== undefined ? (
+      {/* 2. Find the spot: your hint, until everyone's there. */}
+      {round.state === 'playing' && (myHint !== undefined ? (
         <section className="card hero">
-          <CardHead eyebrow="Your word" />
-          <h2>{myWord}</h2>
-          {pose && pieces[AGENT] !== undefined && (
-            <>
-              <p className="eyebrow muted">Your piece of the picture</p>
-              <Piece pose={pose} index={pieces[AGENT]} />
-            </>
-          )}
-          {challenge?.goal && <p className="muted">{challenge.goal}</p>}
-          <p className="muted small">Only you have these. Show your group, and look at theirs. Nobody can finish alone.</p>
+          <CardHead eyebrow="Your hint for the spot" />
+          <h2 className={myHint.length > 60 ? 'mid' : undefined}>{myHint}</h2>
+          {shared.map(([id, hint]) => <p key={id} className="muted">{nameOf(id)} left. Their hint: <b>{hint}</b></p>)}
+          <p className="muted small">Everyone has a different hint. Put them together to work out where to go.</p>
         </section>
       ) : (
         <section className="card plain"><p className="muted">Joining as {nameOf(AGENT)}…</p></section>
-      )}
+      ))}
 
-      {shared.length > 0 && (
-        <section className="card plain">
-          <span className="eyebrow muted">From people who left</span>
-          {shared.map(([id, word]) => (
-            <div key={id} className="shared">
-              <p>{nameOf(id)}'s word: <b>{word}</b></p>
-              {pose && pieces[id] !== undefined && <Piece pose={pose} index={pieces[id]} />}
-            </div>
-          ))}
+      {/* 3. Everyone's at the spot: your part of the pose picture. */}
+      {unlocked && pose && (
+        <section className="card hero">
+          <CardHead eyebrow="The pose" title="Put your parts together" />
+          <PoseFrame
+            pose={pose}
+            mine={pieces[AGENT]}
+            shown={shared.map(([id]) => pieces[id]).filter(i => i !== undefined)}
+            holders={holders}
+          />
+          <p className="muted">Each of you has one part of the same picture. Show each other your screens to see the whole pose, then do it together right here.</p>
         </section>
       )}
 
@@ -410,10 +409,11 @@ export default function App() {
         <span className="eyebrow muted">Steps</span>
         <ol className="step-list">
           <li className={unlocked ? 'done' : 'cur'}>
-            <p className="step"><span className="dot">{unlocked && <Icon name="check" size={14} />}</span>{meet ? `Meet at ${meet.spot} and tap We're here` : "Meet your group and tap We're here"}</p>
+            <p className="step"><span className="dot">{unlocked && <Icon name="check" size={14} />}</span>Find the spot together and tap We're here</p>
           </li>
           <li className={unlocked ? 'cur' : 'lock'}>
-            <p className="step"><span className="dot" />Go to the spot and take the group photo, doing the pose</p>
+            <p className="step"><span className="dot" />Do the pose and take the group photo there</p>
+            {!unlocked && <p className="why">The pose shows up when everyone has tapped We're here.</p>}
             {unlocked && <p className="why">Ask someone nearby to take it, or prop a phone up and use its timer.</p>}
             {notQuite && <p className="why not">Not quite: {notQuite}</p>}
           </li>
@@ -422,7 +422,7 @@ export default function App() {
 
       <section className="card plain">
         <div className="split-head">
-          <span className="eyebrow muted">Who's here</span>
+          <span className="eyebrow muted">Who's at the spot</span>
           <b className="small" style={{ color: here === seats.length ? 'var(--green-text)' : 'var(--muted)' }}>{here} of {seats.length} here</b>
         </div>
         <div className="marks left">

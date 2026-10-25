@@ -35,10 +35,11 @@ CHALLENGE_DESIGNER_URL=http://localhost:8100/challenge .venv/bin/python -m uvico
 2. One of them starts a challenge and picks the size (3-5; never fewer than 3 strangers), in the chat or with Start.
 3. The coordinator invites other people's agents. Each agent answers from its context ("can do 90 minutes");
    invited people tap Accept. The host hears "Jess joined (2 of 4)".
-4. When everyone's in, the challenge is set up: Spot & Pose. Each phone shows that person's secret word and their
-   piece of a meme picture.
-5. The group shares words and pieces, goes to the spot and takes one group photo doing the pose; the photo check
-   looks at both. Then the end screen: rate, meet again?, share?
+4. When everyone's in, the challenge is set up: Spot & Pose. The group meets at the meeting point; each phone shows
+   that person's hint for the spot, a short plain sentence.
+5. They put the hints together, go to the spot and all tap We're here. Then each phone shows its part of one meme
+   picture; together the parts show the pose. One group photo there doing the pose; the photo check looks at the
+   spot and the pose. Then the end screen: rate, meet again?, share?
 
 Fewer real people than you want for a rehearsal? `POST /contexts/seed?shift_to_now=true` checks the unclaimed
 contexts in as stand-in agents, which accept on their own.
@@ -50,7 +51,7 @@ coordinator without that route, it falls back to `/matching/run`.
 
 | Var | Default | What |
 | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | none | Claude for agents, chat, designer and photo checks. Without it: rule answers, hand-written words, photos always pass. |
+| `ANTHROPIC_API_KEY` | none | Claude for agents, chat, designer and photo checks. Without it: rule answers, hand-written hints, photos always pass. |
 | `APIFY_TOKEN` | none | Scrapes place info and reference photos. Without it: built-in hackathon facts. |
 | `MOSS_PROJECT_ID`, `MOSS_PROJECT_KEY` | none | Semantic memory recall. Without them: newest memories from SQLite. |
 | `MOSS_INDEX` | `agent-memory` | Use a fresh name for the demo, so test memories don't carry over. |
@@ -81,9 +82,9 @@ coordinator without that route, it falls back to `/matching/run`.
 | GET | `/stats` | | `"X of Y groups wanted to meet again"`. |
 
 Status `challenge` is what every player sees: `title`, `goal`, `steps` (`id`, `task`; not the check, which names
-the spot), `pose` (the meme `image` and the `cuts` between pieces), `pieces` (who holds which piece), `shared`
-(the words of people who left), `timer_min`. `my_part` is that person's own word; other players' words stay
-hidden. The same words reach the SpacetimeDB board as each seat's key. Transcript lines have `role`: `user`, `agent`
+the spot), `pose` (the meme `image` and the `cuts` between parts), `pieces` (who holds which part; the page shows
+them once everyone's at the spot), `shared` (the hints of people who left), `timer_min`. `my_part` is that person's
+own hint; other players' hints stay hidden. The same hints reach the SpacetimeDB board as each seat's key. Transcript lines have `role`: `user`, `agent`
 or `update` (invitations, joins, steps passed).
 
 The coordinator calls `POST /agents/{id}/question` (the `callback_url` of every agent we run) and
@@ -112,9 +113,9 @@ The coordinator calls `POST /agents/{id}/question` (the `callback_url` of every 
   `my_challenge`, `save_profile`. Coordinator news reaches it as `[Update: …]` lines in the next turn.
 - **Challenge designer** (`designer.py`): Spot & Pose. Each match gets a spot (`data/spots.json` plus verified
   booths) and a meme with one character per player (`data/poses.json`), picked at random so groups spread out.
-  Claude writes one word per player: alone a word could mean anything, together they point to the spot. Code
-  checks one word per player, all different, none giving the spot away. Anything wrong → the spot's hand-written
-  words. Each player's piece is a strip of the meme, cropped on their phone.
+  Claude writes one hint per player, a short plain sentence; together they make it easy to tell where to go. Code
+  checks one hint per player, all different, none naming the spot. Anything wrong → the spot's hand-written hints.
+  Each player's part is a strip of the meme; their phone shows the whole frame with the others' parts covered.
 - **Sponsor booths** (`data/booths.json`, `data/sponsors.json`, `sponsors.py`). What each sponsor does and where
   its booth is. Only booths marked `"verified": true` become spots.
 - **Photo checks** (`vision.py`). Photos are downloaded and sent inline. Generous about angles and blur, strict

@@ -20,9 +20,15 @@ log = logging.getLogger(__name__)
 TIMER_MIN = 15
 MIN_GROUP = MIN_GROUP_SIZE  # a host-led challenge can start early with this many accepted
 ACTIVITY = "creative outdoor challenge"
-# Fallback round when no challenge designer is reachable: Spot & Pose without the picture. Together the words
+# Fallback round when no challenge designer is reachable: Spot & Pose without the picture. Together the hints
 # point to the Apify booth.
-DEMO_WORDS = ["sponsor", "web scraping", "snacks", "actors", "data"]
+DEMO_HINTS = [
+    "It's a sponsor booth.",
+    "They help you scrape websites.",
+    "It's near the snacks.",
+    "Their tools are called Actors.",
+    "They turn web pages into data.",
+]
 NEXT_STATE = {MatchState.confirmed: MatchState.playing, MatchState.playing: MatchState.done}
 
 
@@ -56,8 +62,8 @@ def default_challenge(match: Match) -> dict:
         "round": {
             "type": "spot_and_pose",
             "title": "Spot & Pose",
-            "goal": "Share your words to work out the spot, then take a group photo there.",
-            "keys": {m: DEMO_WORDS[i % len(DEMO_WORDS)] for i, m in enumerate(match.members)},
+            "goal": "Meet your group, then put your hints together to find the spot and take a group photo there.",
+            "keys": {m: DEMO_HINTS[i % len(DEMO_HINTS)] for i, m in enumerate(match.members)},
             "answer": "the Apify booth",
             "unlock": "all_checked_in + photo",
             "timer_min": TIMER_MIN,
@@ -66,7 +72,7 @@ def default_challenge(match: Match) -> dict:
 
 
 def without(rnd: dict, gone: set[str]) -> dict:
-    """The round minus the words of people who left; their words go to `shared`, so the rest can still solve it."""
+    """The round minus the hints of people who left; their hints go to `shared`, so the rest can still solve it."""
     keys = rnd.get("keys") or {}
     shared = {**(rnd.get("shared") or {}), **{m: k for m, k in keys.items() if m in gone}}
     return {**rnd, "keys": {m: k for m, k in keys.items() if m not in gone}, "shared": shared}

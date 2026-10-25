@@ -5,8 +5,13 @@
     "area": "Palace of Fine Arts",
     "about": "Statues of women on top of the colonnade at the Palace of Fine Arts. They face into the tops of the columns, hiding their faces, as if crying.",
     "check": "the colonnade of the Palace of Fine Arts: tall stone columns, ideally with the statues on top",
-    "giveaways": ["weeping", "ladies", "colonnade"],
-    "words": ["crying", "columns", "look up", "statues", "hidden faces"]
+    "hints": [
+      "Look up at the tops of the tall columns.",
+      "There are stone statues of women up there.",
+      "The women hide their faces, like they're crying.",
+      "It's along the long curved row of columns.",
+      "It's outside, next to the hackathon building."
+    ]
   },
   {
     "id": "rotunda",
@@ -14,8 +19,13 @@
     "area": "Palace of Fine Arts",
     "about": "The big domed rotunda in the middle of the Palace of Fine Arts, built for the 1915 world's fair to look like a Roman ruin.",
     "check": "the domed rotunda of the Palace of Fine Arts, or its huge columns and arches",
-    "giveaways": ["rotunda", "dome"],
-    "words": ["arches", "1915", "middle", "Roman ruin", "world's fair"]
+    "hints": [
+      "It's the big round building in the middle.",
+      "It has a huge dome on top.",
+      "It was built for a world's fair in 1915.",
+      "It looks like an old Roman ruin.",
+      "You can see it from across the water."
+    ]
   },
   {
     "id": "lagoon",
@@ -23,7 +33,12 @@
     "area": "Palace of Fine Arts",
     "about": "The pond in front of the rotunda at the Palace of Fine Arts. It was once a mudhole; now ducks swim in it and the dome reflects in the water.",
     "check": "the lagoon at the Palace of Fine Arts, with the water clearly visible",
-    "giveaways": ["lagoon", "pond"],
-    "words": ["water", "reflection", "ducks", "once mud", "shore"]
+    "hints": [
+      "Look for the water.",
+      "Ducks swim there.",
+      "The big dome shows up in it like a mirror.",
+      "It's right in front of the big dome.",
+      "It used to be a mudhole."
+    ]
   }
 ]

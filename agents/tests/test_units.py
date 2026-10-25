@@ -4,7 +4,7 @@ from datetime import datetime
 import pytest
 
 from agents import designer, personal, timeutil
-from agents.designer import Word, Words
+from agents.designer import Hint, Hints
 from agents.models import Answer, PhotoCheck, Profile, Question
 from agents.service import pretty, public_round, slug_id
 
@@ -44,18 +44,18 @@ SPOTS, POSES = designer.load_spots(), designer.load_poses()
 def test_designer_validation():
     members = ["linh", "marcus", "priya"]
     spots = {s.id: s for s in SPOTS}
-    words = {"linh": "arches", "marcus": "1915", "priya": "middle"}
+    hints = {"linh": "It has a huge dome on top.", "marcus": "It was built in 1915.", "priya": "It's in the middle."}
 
-    def check(words, spot="rotunda"):
-        return designer.validate(Words(words=[Word(agent_id=a, word=w) for a, w in words.items()]), members, spots[spot])
+    def check(hints, spot="rotunda"):
+        return designer.validate(Hints(hints=[Hint(agent_id=a, hint=h) for a, h in hints.items()]), members, spots[spot])
 
-    assert check(words) is None
-    assert check({"linh": "arches"}) == "words must have exactly one entry per member"
-    assert check({**words, "priya": "a long clue"}) == "every word must be 1-2 words and at most 24 characters"
-    assert check({**words, "priya": "Arches"}) == "words must all be different"
-    assert check({**words, "priya": "rotunda steps"}) == "a word gives the spot away"
-    assert check({**words, "priya": "big dome"}) == "a word gives the spot away"
-    assert check({**words, "priya": "pond"}, spot="lagoon") == "a word gives the spot away"
+    assert check(hints) is None
+    assert check({"linh": "It has a huge dome on top."}) == "hints must have exactly one entry per member"
+    assert check({**hints, "priya": "x" * 91}) == "every hint must be 1-90 characters"
+    assert check({**hints, "priya": "it has a huge dome on top."}) == "hints must all be different"
+    assert check({**hints, "priya": "Go to the Rotunda."}) == "a hint names the spot"
+    assert check({**hints, "priya": "Ducks swim in the pond."}, spot="lagoon") is None  # plain words are fine
+    assert check({**hints, "priya": "It's the lagoon."}, spot="lagoon") == "a hint names the spot"
     assert designer.fitting(POSES, 3) == [p for p in POSES if p.people == 3]
     assert [p.people for p in designer.fitting(POSES, 6)] == [5]  # no 6-person meme: the closest
 
@@ -66,8 +66,8 @@ def test_hand_picked_spots_and_poses_are_usable():
         assert len(p.cuts) == p.people + 1 and p.cuts[0] == 0 and p.cuts[-1] == 1 and p.cuts == sorted(p.cuts)
         assert p.image.startswith("https://") and 0 <= p.top < 1
     for s in SPOTS:
-        assert len({w.casefold() for w in s.words}) >= 5
-        assert not any(g in w.casefold() for w in s.words for g in designer.giveaways(s))
+        assert len({h.casefold() for h in s.hints}) >= 5 and all(len(h) <= designer.MAX_HINT_CHARS for h in s.hints)
+        assert not any(designer.reveals(h, s) for h in s.hints)
 
 
 def test_fallback_fits_any_group():
@@ -76,7 +76,7 @@ def test_fallback_fits_any_group():
         c = designer.fallback(players, SPOTS, POSES, "m1")
         rnd = c["round"]
         assert c["group"] == [p["agent_id"] for p in players] and rnd["type"] == "spot_and_pose"
-        assert set(rnd["keys"]) == set(c["group"]) and len(set(rnd["keys"].values())) == n  # a different word each
+        assert set(rnd["keys"]) == set(c["group"]) and len(set(rnd["keys"].values())) == n  # a different hint each
         assert sorted(rnd["pieces"].values()) == list(range(n)) and len(rnd["pose"]["cuts"]) == n + 1  # a piece each
         assert rnd["reference_photo"] == rnd["pose"]["image"] and [s["id"] for s in rnd["steps"]] == ["photo"]
         spot = next(s for s in SPOTS if s.id == rnd["spot"])
@@ -113,7 +113,7 @@ def test_fallback_meets_at_the_default_spot():
 def design_with(monkeypatch, spot_from_claude: str, organizer: str = "", spots=None):
     from agents.place import Place
 
-    out = Words(words=[Word(agent_id="phong", word="look up"), Word(agent_id="linh", word="stone")], meeting_point=spot_from_claude)
+    out = Hints(hints=[Hint(agent_id="phong", hint="Look up."), Hint(agent_id="linh", hint="It's made of stone.")], meeting_point=spot_from_claude)
 
     async def parse(*_, **__):
         return out
@@ -145,7 +145,7 @@ def test_past_feedback_shortens_the_fallback_and_tells_only_that_player():
     rnd = designer.fallback(players, SPOTS, POSES, "m2")["round"]
     assert rnd["timer_min"] == designer.SHORT_TIMER_MIN
     assert rnd["tuned"] == {"phong": "Kept it to 10 minutes, since your last one ran long."}
-    assert "tuned" not in public_round(rnd)  # private, like the words
+    assert "tuned" not in public_round(rnd)  # private, like the hints
 
     # Only the players' own words count: a "long" elsewhere in the memory (a name, a title) doesn't.
     plain = [{"agent_id": "x", "name": "X", "past_challenges": ['Played "The Long Walk" and rated it 4/5.']}]
@@ -155,8 +155,8 @@ def test_past_feedback_shortens_the_fallback_and_tells_only_that_player():
 def test_claude_adjustments_reach_only_known_players(monkeypatch):
     from agents.place import Place
 
-    out = Words(
-        words=[Word(agent_id="phong", word="look up"), Word(agent_id="linh", word="stone")],
+    out = Hints(
+        hints=[Hint(agent_id="phong", hint="Look up."), Hint(agent_id="linh", hint="It's made of stone.")],
         timer_min=10,
         adjustments=[
             designer.Adjustment(agent_id="phong", note="Kept it short, since your last one ran long."),

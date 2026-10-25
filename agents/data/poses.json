@@ -4,24 +4,36 @@
     "name": "Spider-Man pointing at Spider-Man",
     "people": 2,
     "image": "https://i.imgflip.com/1tkjq9.jpg",
-    "cuts": [0, 0.5, 1],
+    "cuts": [
+      0,
+      0.5,
+      1
+    ],
     "pose": "two people pointing at each other, like two Spider-Men who just met their double"
   },
   {
-    "id": "woman_yelling_at_cat",
-    "name": "Woman yelling at a cat",
+    "id": "epic_handshake",
+    "name": "Epic Handshake",
     "people": 2,
-    "image": "https://i.imgflip.com/345v97.jpg",
-    "cuts": [0, 0.503, 1],
-    "top": 0.23,
-    "pose": "one person yelling and pointing; the other sits behind a table looking unimpressed, like the cat"
+    "image": "https://i.imgflip.com/28j0te.jpg",
+    "cuts": [
+      0,
+      0.42,
+      1
+    ],
+    "pose": "two people clasping hands high in the middle, elbows bent, like an arm-wrestling grip"
   },
   {
     "id": "distracted_boyfriend",
     "name": "Distracted Boyfriend",
     "people": 3,
     "image": "https://i.imgflip.com/1ur9b0.jpg",
-    "cuts": [0, 0.47, 0.745, 1],
+    "cuts": [
+      0,
+      0.47,
+      0.745,
+      1
+    ],
     "pose": "one person walks past; another turns to look back at them; the third glares at the one looking back"
   },
   {
@@ -29,7 +41,12 @@
     "name": "Three Spider-Men pointing",
     "people": 3,
     "image": "https://i.imgflip.com/3eqjd8.jpg",
-    "cuts": [0, 0.4, 0.64, 1],
+    "cuts": [
+      0,
+      0.4,
+      0.64,
+      1
+    ],
     "pose": "three people all pointing at each other"
   },
   {
@@ -37,7 +54,13 @@
     "name": "Abbey Road",
     "people": 4,
     "image": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/The_Beatles_Abbey_Road_album_cover.jpg/500px-The_Beatles_Abbey_Road_album_cover.jpg",
-    "cuts": [0, 0.275, 0.475, 0.695, 1],
+    "cuts": [
+      0,
+      0.275,
+      0.475,
+      0.695,
+      1
+    ],
     "top": 0.45,
     "pose": "four people walking in a line, in step, like the Beatles on the Abbey Road cover (on a path, not a road)"
   },
@@ -46,7 +69,14 @@
     "name": "the Ginyu Force pose",
     "people": 5,
     "image": "https://i.kym-cdn.com/entries/icons/facebook/000/018/088/tu67gNI.jpg.jpg",
-    "cuts": [0, 0.2, 0.36, 0.52, 0.68, 1],
+    "cuts": [
+      0,
+      0.2,
+      0.36,
+      0.52,
+      0.68,
+      1
+    ],
     "pose": "five people striking a dramatic superhero team pose together: some crouching low, some arms out wide"
   }
 ]

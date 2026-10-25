@@ -66,7 +66,7 @@ def test_confirm_starts_round_and_marks_playing(fake):
     assert args["answer"] == "the Apify booth" and args["kind"] == "spot_and_pose"
     assert {s["agent_id"]: s["role"] for s in args["seats"]} == {"linh": "riddles", "marcus": "map", "priya": "camera"}
     assert all(s["key"] for s in args["seats"])
-    assert {s["key"] for s in args["seats"]} == {"sponsor", "web scraping", "snacks"}  # one word each
+    assert {s["key"] for s in args["seats"]} == {"It's a sponsor booth.", "They help you scrape websites.", "It's near the snacks."}
     assert all("hint" in s for s in args["seats"])  # the demo round has none; designed rounds pass theirs on
     assert "round live · 3 phones can join" in texts(client)
     client.__exit__(None, None, None)

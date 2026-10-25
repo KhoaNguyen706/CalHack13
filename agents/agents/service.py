@@ -74,8 +74,8 @@ PAST_CHALLENGES = "how did the last challenge go: too long, too hard, what they 
 
 
 def public_round(rnd: dict) -> dict:
-    """The challenge as every player may see it: not the others' words, the answer, or the photo check (it names
-    the spot). `shared` holds the words of people who left, so the rest can still solve it."""
+    """The challenge as every player may see it: not the others' hints, the answer, or the photo check (it names
+    the spot). `shared` holds the hints of people who left, so the rest can still solve it."""
     keys = ("type", "title", "goal", "pose", "pieces", "shared", "reference_photo", "timer_min", "unlock", "meet")
     steps = [{"id": s["id"], "task": s["task"]} for s in rnd.get("steps") or []]
     return {**{k: rnd.get(k) for k in keys}, "steps": steps}
@@ -596,15 +596,14 @@ class AgentsService:
                 rnd = m["challenge"].get("round") or {}
                 for a in people:
                     others = " and ".join(self.display(o) for o in members if o != a)
-                    word = (rnd.get("keys") or {}).get(a, "")
+                    hint = (rnd.get("keys") or {}).get(a, "")
                     meet = rnd.get("meet") or {}
                     where = (
                         f" Meet at {meet['spot']}. Look for phones showing {meet['emoji']} {meet['sign']}, and hold yours up too."
                         if meet.get("spot") else ""
                     )
-                    goal = rnd.get("goal") or "Share your words with your group to work out the spot."
-                    piece = " Your piece of the picture is on the game page." if rnd.get("pose") else ""
-                    text = f"Everyone's in! You're meeting {others}.{where} {rnd.get('title', 'Your challenge')}: {goal} Your word: “{word}”.{piece}"
+                    goal = rnd.get("goal") or "Put your hints together to find the spot."
+                    text = f"Everyone's in! You're meeting {others}.{where} {rnd.get('title', 'Your challenge')}: {goal} Your hint: “{hint}”"
                     if tuned := (rnd.get("tuned") or {}).get(a):  # only this player hears what their feedback changed
                         text += f" {tuned}"
                     self.notify(a, f"{mid}:challenge", text)

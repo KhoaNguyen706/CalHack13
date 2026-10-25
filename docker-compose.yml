@@ -48,7 +48,7 @@ services:
       COORDINATOR_URL: http://coordinator:8000
       # Persona callbacks go here; the coordinator reaches it over the Compose network.
       AGENTS_PUBLIC_URL: http://agents:8100
-      # Without it, agents decide with rules and rounds use hand-written words.
+      # Without it, agents decide with rules and rounds use hand-written hints.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # Optional: Apify scrapes place info for challenges; Moss finds relevant memories.
       APIFY_TOKEN: ${APIFY_TOKEN:-}

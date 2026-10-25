@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useReducer, useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { reducers, tables } from './module_bindings';
 import { AGENTS, API, openedKey } from './config.ts';
+import Forming from './Forming.tsx';
 import { buzz, CardHead, Confetti, Icon, MeetCard, Pebble, SignScreen, Walrus, type Meet, type PebbleMood } from './ui.tsx';
 
 const params = new URLSearchParams(location.search);
@@ -435,7 +436,7 @@ export default function App() {
   const heading = challenge?.title ?? 'Challenge';
   if (!MATCH || !AGENT) return <Waiting text="Open the game link from your agent." mood="oops" />;
   if (!isActive) return <Waiting text="Connecting…" heading={heading} mood="sleepy" />;
-  if (!round) return <Waiting text="Waiting for your round to start…" heading={heading} />;
+  if (!round) return <Forming matchId={MATCH} agentId={AGENT} heading={heading} />;
 
   // Called off: too few people were left. The Coordinator says sorry and your agent keeps looking.
   if (round.state === 'cancelled') {

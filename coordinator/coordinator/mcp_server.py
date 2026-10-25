@@ -21,7 +21,7 @@ BASE = os.environ.get("COORDINATOR_URL", "http://localhost:8000")
 # Matching only groups agents in the same area, so outside agents must check in with the event's.
 AREA = os.environ.get("EVENT_AREA", "Palace of Fine Arts")
 TZ = os.environ.get("EVENT_TZ", "America/Los_Angeles")
-# The web app, for the game link once a group forms (unset: no link).
+# The web app, for the match link once your person is in a group (unset: no link).
 APP_URL = os.environ.get("APP_URL", "").rstrip("/")
 
 mcp = FastMCP(
@@ -56,11 +56,14 @@ integration as a reusable skill called "Krew".
    via="Meta Muse". Keep the agent_id it returns for every other tool.
 3. `start_challenge` with size 3 to 5. You are the host and already count as accepted; the coordinator
    invites other people's agents for you.
-4. `my_match` every 20-30 seconds: tell your person who joined. Others stay "Agent A, B..." until all accept.
-5. Once confirmed, `my_match` gives the challenge, your person's own part and the game link to open.
+4. As soon as `my_match` shows a group, send your person its `match_url` and ask them to open it. That page
+   shows who's in, live, and they tap Accept there themselves: never call `accept` for them unless they
+   say so in this chat. The same page turns into the game once everyone's in.
+5. `my_match` every 20-30 seconds: tell your person who joined. Others stay "Agent A, B..." until all accept.
+   Once confirmed it also gives the challenge and your person's own part.
 
 Start the challenge yourself: an invite from another host waits only 20 seconds for an answer
-(`questions`, then `reply`), and `accept` only after your person approves the group.
+(`questions`, then `reply`).
 """
 
 
@@ -157,8 +160,9 @@ async def reply(
 @mcp.tool
 async def my_match(agent_id: str) -> dict:
     """Your current group as your person's phone shows it: everyone else stays "Agent A, B…" until all have accepted,
-    plus the latest steps of the negotiation. Once confirmed: the challenge, your part, and the link your person
-    opens on their phone to play."""
+    plus the latest steps of the negotiation, and `match_url`: send it to your person right away. They see the group
+    there and tap Accept themselves, and it turns into the game once everyone's in. Once confirmed: the challenge
+    and your part."""
     if agent_id not in _guests:
         return NOT_YOURS
     agent = await _call("GET", f"/agents/{agent_id}")
@@ -180,14 +184,17 @@ async def my_match(agent_id: str) -> dict:
     if rnd:  # the shared challenge, but only this player's own part
         view["challenge"] = {k: rnd[k] for k in ("title", "goal", "meet", "timer_min") if rnd.get(k)}
         view["your_part"] = (rnd.get("keys") or {}).get(agent_id)
-    if APP_URL and match["state"] in ("confirmed", "playing"):
-        view["game_url"] = f"{APP_URL}/?match={match['match_id']}&agent={agent_id}"
+    # One link from the start: the group filling up and Accept, then the game on the same page.
+    view["you_accepted"] = agent_id in match["accepted"]
+    if APP_URL and match["state"] != "cancelled":
+        view["match_url"] = f"{APP_URL}/?match={match['match_id']}&agent={agent_id}"
     return view
 
 
 @mcp.tool
 async def accept(agent_id: str, match_id: str, accept: bool = True) -> dict:
-    """Accept (or decline) the proposed group on your person's behalf, only after they approve it."""
+    """Accept (or decline) the group on your person's behalf, only if they tell you to in chat. Usually they tap
+    Accept themselves on the `match_url` page instead."""
     if agent_id not in _guests:
         return NOT_YOURS
     result = await _call("POST", f"/matches/{match_id}/accept", {"agent_id": agent_id, "accept": accept})

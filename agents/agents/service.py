@@ -493,7 +493,17 @@ class AgentsService:
             "members": [{"agent_id": a, "name": self.display(a)} for a in match["members"]],
             "challenge": public_round(rnd) if rnd else None,
             "progress": self.progress(match_id, rnd) if rnd else None,
+            # Who's at the meeting point; the challenge starts on every phone once it's all the members.
+            "met": [a for a in self.store.meetups(match_id) if a in match["members"]],
         }
+
+    async def met(self, match_id: str, agent_id: str) -> dict:
+        """A player tapped We're here at the meeting point. Returns the updated view."""
+        match = await self.coordinator.match(match_id)
+        if agent_id not in match["members"]:
+            raise Conflict(f"{agent_id} isn't in this challenge")
+        self.store.save_meetup(match_id, agent_id)
+        return await self.challenge_view(match_id)
 
     def progress(self, match_id: str, rnd: dict) -> dict:
         checks = self.store.checks(match_id)

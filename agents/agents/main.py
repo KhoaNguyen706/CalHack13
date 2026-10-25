@@ -20,7 +20,7 @@ from .coordinator_client import CoordinatorClient, CoordinatorError
 from .geo import GeoService
 from .memory import Memory
 from .mirror import Mirror
-from .models import Answer, ChatIn, ChatLine, Consent, Decision, DemoLogin, Feedback, Login, PersonalContext, PhotoCheck, PhotoUpload, Question, SpacetimeLogin, Start
+from .models import Answer, Arrival, ChatIn, ChatLine, Consent, Decision, DemoLogin, Feedback, Login, PersonalContext, PhotoCheck, PhotoUpload, Question, SpacetimeLogin, Start
 from .place import Place, PlaceService
 from .poses import SIZES, PoseSearch
 from .service import AgentsService, Conflict, NotFound
@@ -242,6 +242,11 @@ def create_app(
     async def challenge(match_id: str) -> dict:
         """The game page: title, goal, steps and their progress, and who's in the group. Nobody's part or hint."""
         return await guarded(svc().challenge_view(match_id))
+
+    @app.post("/challenges/{match_id}/met")
+    async def met(match_id: str, body: Arrival) -> dict:
+        """We're here at the meeting point. Every phone polls the view; once `met` is everyone, the challenge starts."""
+        return await guarded(svc().met(match_id, body.agent_id))
 
     @app.get("/challenges/{match_id}/progress")
     async def progress(match_id: str) -> dict:

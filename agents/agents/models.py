@@ -147,6 +147,12 @@ class Decision(BaseModel):
     accept: bool = True
 
 
+class Arrival(BaseModel):
+    """POST /challenges/{match_id}/met: this player tapped We're here at the meeting point."""
+
+    agent_id: str
+
+
 class PhotoUpload(BaseModel):
     """POST /photos: the group photo straight from the phone's camera, as base64 (the page shrinks it first)."""
 

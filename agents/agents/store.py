@@ -21,7 +21,7 @@ class Mirror(Protocol):
     def delete(self, kind: str, key: str) -> None: ...
 
 
-TABLES = ("users", "memories", "feedback", "photo_checks", "photos", "pose_cache")
+TABLES = ("users", "memories", "feedback", "photo_checks", "photos", "pose_cache", "meetups")
 
 
 class Store:
@@ -46,6 +46,10 @@ class Store:
             " media_type TEXT NOT NULL, data BLOB NOT NULL, ts REAL NOT NULL)"
         )
         self.db.execute("CREATE TABLE IF NOT EXISTS pose_cache (size INTEGER PRIMARY KEY, body TEXT NOT NULL, ts REAL NOT NULL)")
+        self.db.execute(
+            "CREATE TABLE IF NOT EXISTS meetups (match_id TEXT NOT NULL, agent_id TEXT NOT NULL, ts REAL NOT NULL,"
+            " PRIMARY KEY (match_id, agent_id))"
+        )
         if mirror:
             for kind, row in mirror.load():
                 if kind == "photos":
@@ -127,6 +131,16 @@ class Store:
 
     def save_pose_cache(self, size: int, body: dict) -> None:
         self._save("pose_cache", str(size), {"size": size, "body": json.dumps(body), "ts": time.time()})
+
+    # --- who has tapped We're here at the meeting point -------------------------
+
+    def save_meetup(self, match_id: str, agent_id: str) -> None:
+        if not self.db.execute("SELECT 1 FROM meetups WHERE match_id = ? AND agent_id = ?", (match_id, agent_id)).fetchone():
+            self._save("meetups", f"{match_id}:{agent_id}", {"match_id": match_id, "agent_id": agent_id, "ts": time.time()})
+
+    def meetups(self, match_id: str) -> list[str]:
+        """Who has arrived, in the order they did."""
+        return [r[0] for r in self.db.execute("SELECT agent_id FROM meetups WHERE match_id = ? ORDER BY ts", (match_id,))]
 
     # --- photo checks ------------------------------------------------------------
 

@@ -13,7 +13,6 @@ const MATCH = params.get('match') ?? '';
 const AGENT = params.get('agent') ?? '';
 const CHAT = `?agent=${AGENT}`;
 const VIEW = `krew-view:${MATCH}`;
-const MET = `krew-met:${MATCH}`; // this phone tapped We're here at the meeting point
 
 // You've seen this challenge: from now on the chat lets you stay when you tap "<".
 if (MATCH) {
@@ -30,6 +29,7 @@ type Pose = { image: string; cuts: number[]; top?: number };
 type View = {
   state: string;
   members: { agent_id: string; name: string }[];
+  met?: string[]; // who has tapped We're here at the meeting point
   challenge: {
     title?: string;
     goal?: string;
@@ -316,17 +316,13 @@ export default function App() {
   const [notQuite, setNotQuite] = useState(''); // why the last group photo didn't pass
   const [shooting, setShooting] = useState(false); // the group photo camera is open
   const [sending, setSending] = useState(false);
-  const [met, setMet] = useState(() => {
-    try {
-      return !!localStorage.getItem(MET);
-    } catch {
-      return false;
-    }
-  });
+  const [tapped, setTapped] = useState(false); // We're here at the meeting point, before the next poll shows it
   const [swipe, setSwipe] = useState<'out' | 'in'>(); // the meeting page swiping off, the challenge sliding in
   const [reaction, react] = useReaction();
   const joined = useRef(false);
   const arrived = useRef<Set<string> | null>(null);
+  const metBefore = useRef<Set<string> | null>(null);
+  const allMetBefore = useRef<boolean | null>(null);
   const lastState = useRef('');
 
   const round = rounds[0];
@@ -342,6 +338,8 @@ export default function App() {
   const holders: string[] = [];
   for (const [id, i] of Object.entries(pieces)) holders[i] = nameOf(id);
   const photoStep = challenge?.steps?.[0]?.id;
+  const metIds = view?.met ?? [];
+  const allMet = !!view?.members.length && view.members.every(m => metIds.includes(m.agent_id));
 
   // Claim this person's seat once the round exists.
   useEffect(() => {
@@ -371,25 +369,41 @@ export default function App() {
     lastState.current = round.state;
   }, [round?.state]);
 
+  // Someone else reached the meeting point: say so, by name.
+  useEffect(() => {
+    if (!view) return;
+    if (metBefore.current) {
+      const fresh = metIds.find(a => a !== AGENT && !metBefore.current!.has(a));
+      if (fresh) react('excited', `${nameOf(fresh)} is here!`);
+    }
+    metBefore.current = new Set(metIds);
+  }, [metIds.join()]);
+
+  // The last of the group just arrived: on every phone the meeting page swipes off and the challenge slides in.
+  // (Opening the game after that goes straight to the challenge.)
+  useEffect(() => {
+    if (!view) return;
+    if (allMetBefore.current === false && allMet) {
+      buzz([12, 50, 12]);
+      setSwipe('out');
+      setTimeout(() => setSwipe('in'), 320);
+    }
+    allMetBefore.current = allMet;
+  }, [allMet, !view]);
+
   const run = (p: Promise<unknown>) => {
     setError('');
     return p.catch(e => setError(String(e?.message ?? e)));
   };
 
-  // We're here at the meeting point: just this phone's own page, so the meeting page swipes off and the challenge
-  // slides in.
+  // We're here at the meeting point. The challenge waits for the whole group.
   const haveMet = () => {
     buzz(14);
-    setSwipe('out');
-    setTimeout(() => {
-      setMet(true);
-      setSwipe('in');
-      try {
-        localStorage.setItem(MET, '1');
-      } catch {
-        // private mode: a reload shows the meeting page again, that's all
-      }
-    }, 320);
+    setTapped(true);
+    run(post(`${AGENTS}/challenges/${MATCH}/met`, { agent_id: AGENT }).catch(e => {
+      setTapped(false);
+      throw e;
+    }));
   };
 
   // Leave at any point: the coordinator drops your seat (or calls the challenge off if too few are left).
@@ -471,17 +485,44 @@ export default function App() {
   const meet = challenge?.meet;
   const others = (view?.members ?? []).filter(m => m.agent_id !== AGENT).map(m => m.name);
 
-  // Page 1: meet your group first. Nothing else until this phone taps We're here.
-  if (meet && round.state === 'playing' && !met && !mySeat?.checkedIn) {
+  // Page 1: meet your group first. The challenge starts once everyone has tapped We're here.
+  if (meet && round.state === 'playing' && !mySeat?.checkedIn && (!allMet || swipe === 'out')) {
+    const waiting = tapped || metIds.includes(AGENT);
+    const count = (view?.members ?? []).filter(m => metIds.includes(m.agent_id)).length;
     return (
       <Shell>
         <Top heading={heading} minutes={minutesLeft} />
         <div className={`page${swipe === 'out' ? ' swipe-out' : ''}`}>
           <MeetCard meet={meet} onShow={() => setSign(true)} />
-          {others.length > 0 && <p className="muted center">You're meeting {others.join(' and ')}.</p>}
+          {others.length > 0 && (
+            <section className="card plain">
+              <div className="split-head">
+                <span className="eyebrow muted">Who's here</span>
+                <b className="small" style={{ color: allMet ? 'var(--green-text)' : 'var(--muted)' }}>{count} of {view?.members.length} here</b>
+              </div>
+              <div className="marks left">
+                {(view?.members ?? []).map(m => {
+                  const here = metIds.includes(m.agent_id) || (m.agent_id === AGENT && tapped);
+                  return (
+                    <span key={m.agent_id} className={`mark big${here ? ' ok' : ''}`}>
+                      <Icon name={here ? 'check' : 'clock'} size={16} />
+                      {m.agent_id === AGENT ? 'You' : m.name}
+                      <small>· {here ? 'here' : 'on the way'}</small>
+                    </span>
+                  );
+                })}
+              </div>
+            </section>
+          )}
           <div className="grow" />
-          <p className="muted small center">Found each other? Tap We're here and the challenge begins.</p>
-          <button className="btn primary big" disabled={!!swipe} onClick={haveMet}>We're here</button>
+          {waiting ? (
+            <div className="status big"><Icon name="clock" size={20} /><span>Waiting for the others…</span></div>
+          ) : (
+            <>
+              <p className="muted small center">Found the group? Tap We're here. The challenge starts when everyone has.</p>
+              <button className="btn primary big" disabled={!!swipe} onClick={haveMet}>We're here</button>
+            </>
+          )}
           <button className="link" onClick={() => run(leave())}>Leave challenge</button>
           {error && <p className="error">{error}</p>}
         </div>

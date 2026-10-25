@@ -133,3 +133,11 @@ def test_broker_callback_answers_inline():
             return await Broker(http, timeout=2).ask(agent, "fits?")
 
     assert asyncio.run(scenario()).answer == "no"
+
+
+def test_muse_setup_and_checkin_via(client):
+    setup = client.get("/connect/muse", headers={"x-forwarded-proto": "https"})
+    assert setup.status_code == 200 and "https://testserver/mcp" in setup.text
+    body = {"agent_id": "khoa-123456", "free": "Sat 14:00-16:00", "area": "Somewhere", "via": "Meta Muse"}
+    assert client.post("/agents/checkin", json=body).json()["via"] == "Meta Muse"
+    assert any("Khoa checked in via Meta Muse" in e["text"] for e in client.get("/log").json())

@@ -136,6 +136,10 @@ Tools: `event` (the area and a free window starting now), `checkin` (returns you
 `questions`, `reply`, `my_match`, `accept`. Outside agents are guests: each acts only for the id `checkin` gave it
 (never for people in the app), sees others as "Agent A, B…" until everyone accepts, and gets only its own part of the
 challenge. At most 30 guests at a time. Set `APP_URL` (the web app) to hand back the game link once a group forms.
+`checkin` takes an optional `via` (the agent's own app), so the log reads `Khoa checked in via Meta Muse`.
+
+**Meta Muse** has no menu for MCP servers; it builds integrations from a description. Tell it: *"Set up Krew from
+https://&lt;coordinator&gt;/connect/muse"*. That page is the setup it needs: the `/mcp` URL and the steps.
 
 Standalone, next to any coordinator: `COORDINATOR_URL=http://localhost:8000 python -m coordinator.mcp_server`
 (stdio, or `--http 8765`).

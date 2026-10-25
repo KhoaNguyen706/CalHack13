@@ -35,6 +35,34 @@ mcp = FastMCP(
 )
 _transport: httpx.AsyncBaseTransport | None = None
 
+# Meta Muse has no "add MCP server" menu: it reads a description and builds the integration on its own VM.
+# Served at /connect/muse, so the person only tells Muse "set up Krew from <that link>".
+MUSE_SETUP = """# Krew for Meta Muse
+
+Krew finds your person a small group at the event and an AI-designed challenge they can only win together.
+You, their agent, talk only to Krew's coordinator, never to other agents, and share coarse info only:
+a first name, a free window and a few interests. Never an exact location.
+
+## Set up once
+
+Build a custom integration to the Krew MCP server at {mcp}
+It is streamable HTTP with no key and no OAuth. Test the `event` tool end to end, then save the
+integration as a reusable skill called "Krew".
+
+## Find your person a group
+
+1. `event`: the area and a free window starting now.
+2. `checkin` with your person's first name, free window, the area, a few interests and skills, and
+   via="Meta Muse". Keep the agent_id it returns for every other tool.
+3. `start_challenge` with size 3 to 5. You are the host and already count as accepted; the coordinator
+   invites other people's agents for you.
+4. `my_match` every 20-30 seconds: tell your person who joined. Others stay "Agent A, B..." until all accept.
+5. Once confirmed, `my_match` gives the challenge, your person's own part and the game link to open.
+
+Start the challenge yourself: an invite from another host waits only 20 seconds for an answer
+(`questions`, then `reply`), and `accept` only after your person approves the group.
+"""
+
 
 def serve_inside(app: FastAPI) -> None:
     """Mounted on the coordinator itself: call its routes in-process instead of over the network."""
@@ -79,10 +107,11 @@ async def checkin(
     interests: list[str] | None = None,
     skills: list[str] | None = None,
     group_pref: Literal["small", "any", "large"] = "small",
+    via: str | None = None,
 ) -> dict:
     """Check your person in for a meetup. `name` is a first name only. Coarse info only: free like
-    "Sat 14:00-16:00" and the area from `event`, no exact location. Returns the agent_id for every other tool.
-    Then `start_challenge`."""
+    "Sat 14:00-16:00" and the area from `event`, no exact location. `via` is your own app's name ("Meta Muse",
+    "Claude", ...), shown in the live log. Returns the agent_id for every other tool. Then `start_challenge`."""
     if len(_guests) >= MAX_GUESTS:
         return {"error": 429, "detail": "the event is full of outside agents right now"}
     agent_id = f"{_slug(name)}-{secrets.randbelow(900_000) + 100_000}"
@@ -90,7 +119,7 @@ async def checkin(
         "POST",
         "/agents/checkin",
         {"agent_id": agent_id, "free": free, "area": area, "interests": interests or [],
-         "skills": skills or [], "group_pref": group_pref},
+         "skills": skills or [], "group_pref": group_pref, "via": (via or "")[:32] or None},
     )
     if "error" not in agent:
         _guests.add(agent_id)

@@ -54,6 +54,8 @@ class CheckIn(BaseModel):
     area: str = Field(min_length=1, max_length=64)
     # Where the coordinator POSTs questions. Omit it and poll GET /agents/{id}/questions instead.
     callback_url: str | None = None
+    # The person's own agent app (e.g. "Meta Muse"), shown in the log.
+    via: str | None = Field(None, max_length=32)
 
     @field_validator("free")
     @classmethod

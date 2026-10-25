@@ -10,13 +10,14 @@ from pathlib import Path
 
 import anthropic
 import httpx
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 
 from .broker import Broker
 from .coordinator import Conflict, Coordinator, NotFound
 from .events import EventLog
-from .mcp_server import mcp, serve_inside
+from .mcp_server import MUSE_SETUP, mcp, serve_inside
 from .models import Accept, Agent, Ask, CheckIn, Leave, Match, MatchState, NewChallenge, Question, Reply, StateChange
 from .mirror import Mirror
 from .spacetime import Spacetime
@@ -248,6 +249,12 @@ def create_app(
     @app.get("/log")
     async def log_history() -> list[dict]:
         return coord().events.history
+
+    @app.get("/connect/muse", response_class=PlainTextResponse)
+    async def connect_muse(request: Request) -> str:
+        """Setup notes Meta Muse reads to build its Krew integration (Muse has no menu for MCP servers)."""
+        scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+        return MUSE_SETUP.format(mcp=f"{scheme}://{request.url.netloc}/mcp")
 
     # Any MCP agent (a judge's own Claude as a connector) joins the live event at /mcp. Mounted last, so every route
     # above still wins.

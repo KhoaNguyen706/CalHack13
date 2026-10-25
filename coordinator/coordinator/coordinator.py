@@ -113,9 +113,10 @@ class Coordinator:
             auto_reply=auto_reply,
         )
         self.store.save_agent(agent)
+        via = f" via {agent.via}" if agent.via else ""
         self.events.emit(
             "coordinator",
-            f"{name(agent.agent_id)} checked in · {agent.area} · {pretty(agent.window)}",
+            f"{name(agent.agent_id)} checked in{via} · {agent.area} · {pretty(agent.window)}",
             agent_id=agent.agent_id,
         )
         if agent.match_id is None:  # someone new: challenges with open seats may want them

@@ -311,49 +311,49 @@ export function Buddy({ animal, ...rest }: { animal: Animal; mood?: PebbleMood; 
   return <Critter animal={animal} {...critter} />;
 }
 
-// Wally the walrus, the Coordinator. Lavender, always. `x`/`y` place it when nested inside another svg.
+// Wally the walrus, the Coordinator, as in the mascot art (traced at 1024 px, drawn at 120 so the mood animations
+// share units with the other avatars). `x`/`y` place it when nested inside another svg.
+const ART = 'scale(0.1171875)'; // 120 / 1024
 export function Walrus({ mood = 'happy', size = 76, x, y }: { mood?: WalrusMood; size?: number } & Spot) {
-  const ink = '#2B2766', body = '#CBBFFF', muzzle = '#ECE7FF', glow = '#7F6DF2';
+  const ink = '#35317C', body = '#C9C1FF', muzzle = '#E5E1FF', brow = '#6E7AE6';
   return (
     <svg x={x} y={y} width={size} height={size} viewBox="0 0 120 120" fill="none" role="img" aria-label={`Wally the walrus, the Coordinator${mood === 'happy' ? '' : `, ${mood === 'cheer' ? 'cheering' : mood}`}`} className={`walrus ${mood}`}>
       <g key={mood} className="mood">
-        <path d="M 60 12 C 92 12 112 34 112 62 C 112 92 90 106 60 106 C 30 106 8 92 8 62 C 8 34 28 12 60 12 Z" fill={body} stroke={ink} strokeWidth="3.2" strokeLinejoin="round" />
-        <path d="M 44 24 Q 52 19 60 22" stroke={glow} strokeWidth="2.6" strokeLinecap="round" />
-        <path d="M 60 22 Q 68 19 76 24" stroke={glow} strokeWidth="2.6" strokeLinecap="round" />
-        <circle cx="60" cy="30" r="2.2" fill={glow} /><circle cx="48" cy="31" r="1.8" fill={glow} /><circle cx="72" cy="31" r="1.8" fill={glow} />
-        {mood === 'cheer' ? (
-          <g stroke={ink} strokeWidth="3.4" strokeLinecap="round"><path d="M 36 54 Q 42 45 48 54" /><path d="M 72 54 Q 78 45 84 54" /></g>
-        ) : (
-          <g transform={mood === 'thinking' ? 'translate(-2 -3)' : undefined}>
-            {[42, 78].map(cx => (
-              <g key={cx} className="blink"><circle cx={cx} cy="52" r="5" fill={ink} /><circle cx={cx + 1.6} cy="50.2" r="1.6" fill={body} /></g>
-            ))}
+        <g transform={ART}>
+          <path d="M512 102 C712 102 812 228 872 372 C924 498 944 590 936 690 C922 858 764 944 512 944 C260 944 102 858 88 690 C80 590 100 498 152 372 C212 228 312 102 512 102 Z" fill={body} stroke={ink} strokeWidth="22" strokeLinejoin="round" />
+          <path d="M380 212 Q446 172 512 198 Q578 172 644 212" stroke={brow} strokeWidth="24" strokeLinecap="round" strokeLinejoin="round" />
+          <g fill={brow}><circle cx="401" cy="272" r="15" /><circle cx="512" cy="263" r="19" /><circle cx="623" cy="272" r="15" /></g>
+          {mood === 'cheer' ? (
+            <g stroke={ink} strokeWidth="24" strokeLinecap="round"><path d="M298 414 Q341 352 384 414" /><path d="M640 414 Q683 352 726 414" /></g>
+          ) : (
+            <g transform={mood === 'thinking' ? 'translate(-8 -14)' : undefined}>
+              {[341, 683].map(cx => (
+                <g key={cx} className="blink"><circle cx={cx} cy="400" r="44" fill={ink} /><circle cx={cx + 14} cy="384" r="14" fill="#FFFFFF" /></g>
+              ))}
+            </g>
+          )}
+          {mood === 'sorry' && <g stroke={ink} strokeWidth="22" strokeLinecap="round"><path d="M282 330 L382 300" /><path d="M742 330 L642 300" /></g>}
+          <path d="M352 700 L440 700 L428 890 Q425 918 396 918 Q367 918 364 890 Z" fill="#FFFFFF" stroke={ink} strokeWidth="20" strokeLinejoin="round" />
+          <path d="M584 700 L672 700 L660 890 Q657 918 628 918 Q599 918 596 890 Z" fill="#FFFFFF" stroke={ink} strokeWidth="20" strokeLinejoin="round" />
+          {/* One outline round both cheeks: outlined circles first, then their fills on top hide the inner edges. */}
+          <circle cx="420" cy="588" r="148" fill={muzzle} stroke={ink} strokeWidth="22" />
+          <circle cx="604" cy="588" r="148" fill={muzzle} stroke={ink} strokeWidth="22" />
+          <circle cx="420" cy="588" r="137" fill={muzzle} /><circle cx="604" cy="588" r="137" fill={muzzle} />
+          <path d="M432 452 Q512 428 592 452 C586 506 556 540 512 540 C468 540 438 506 432 452 Z" fill={ink} />
+          <g fill={ink}>
+            <circle cx="350" cy="580" r="13" /><circle cx="384" cy="640" r="13" /><circle cx="444" cy="648" r="10" />
+            <circle cx="674" cy="580" r="13" /><circle cx="640" cy="640" r="13" /><circle cx="580" cy="648" r="10" />
           </g>
-        )}
+          {mood === 'thinking' && <g fill={brow} className="thought"><circle cx="800" cy="150" r="18" /><circle cx="862" cy="94" r="24" /><circle cx="934" cy="42" r="30" /></g>}
+          {mood === 'cheer' && (
+            <g stroke={brow} strokeWidth="22" strokeLinecap="round" className="shake">
+              <path d="M110 214 L168 254" /><path d="M66 324 L134 334" /><path d="M914 214 L856 254" /><path d="M958 324 L890 334" />
+            </g>
+          )}
+        </g>
         {mood === 'sorry' && (
-          <>
-            <g stroke={ink} strokeWidth="3" strokeLinecap="round"><path d="M 33 44 L 49 38" /><path d="M 87 44 L 71 38" /></g>
-            <path d="M 104 50 C 104 50 99 57 99 61 A 5 5 0 0 0 109 61 C 109 57 104 50 104 50 Z" fill="#38BDF8" className="drip" />
-          </>
-        )}
-        <circle cx="50" cy="76" r="17" fill={muzzle} stroke={ink} strokeWidth="3" />
-        <circle cx="70" cy="76" r="17" fill={muzzle} stroke={ink} strokeWidth="3" />
-        <circle cx="50" cy="76" r="14.4" fill={muzzle} /><circle cx="70" cy="76" r="14.4" fill={muzzle} />
-        <path d="M 53 62 Q 60 58 67 62 Q 66 69 60 69 Q 54 69 53 62 Z" fill={ink} />
-        <g fill={ink}><circle cx="42" cy="75" r="1.6" /><circle cx="46" cy="81" r="1.6" /><circle cx="78" cy="75" r="1.6" /><circle cx="74" cy="81" r="1.6" /></g>
-        <path d="M 60 69 L 60 77" stroke={ink} strokeWidth="2.6" strokeLinecap="round" />
-        {mood === 'happy' && <path d="M 52 80 Q 60 87 68 80" stroke={ink} strokeWidth="2.8" strokeLinecap="round" />}
-        {mood === 'thinking' && <path d="M 54 82 Q 60 84 66 82" stroke={ink} strokeWidth="2.8" strokeLinecap="round" />}
-        {mood === 'sorry' && <path d="M 53 83 Q 60 79 67 83" stroke={ink} strokeWidth="2.8" strokeLinecap="round" />}
-        {mood === 'cheer' && <path d="M 52 80 Q 60 80 68 80 Q 66 90 60 90 Q 54 90 52 80 Z" fill={ink} />}
-        <path d="M 47 90 L 45 111" stroke={ink} strokeWidth="11" strokeLinecap="round" />
-        <path d="M 73 90 L 75 111" stroke={ink} strokeWidth="11" strokeLinecap="round" />
-        <path d="M 47 90 L 45 110" stroke="#FFFFFF" strokeWidth="6" strokeLinecap="round" />
-        <path d="M 73 90 L 75 110" stroke="#FFFFFF" strokeWidth="6" strokeLinecap="round" />
-        {mood === 'thinking' && <g fill={glow} className="thought"><circle cx="96" cy="20" r="2.6" /><circle cx="104" cy="12" r="3.6" /><circle cx="113" cy="4" r="4.4" /></g>}
-        {mood === 'cheer' && (
-          <g stroke={glow} strokeWidth="3" strokeLinecap="round" className="shake">
-            <path d="M 10 22 L 18 28" /><path d="M 6 38 L 15 40" /><path d="M 110 22 L 102 28" /><path d="M 114 38 L 105 40" />
+          <g className="drip">
+            <path transform={ART} d="M846 424 C846 424 818 466 818 488 A28 28 0 0 0 874 488 C874 466 846 424 846 424 Z" fill="#38BDF8" />
           </g>
         )}
       </g>

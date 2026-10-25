@@ -84,6 +84,7 @@ def test_fallback_fits_any_group():
     assert designer.fallback(players, SPOTS, POSES, "m1") == c  # the same match always gets the same round
     six = [{"agent_id": f"p{i}", "name": f"P{i}"} for i in range(6)]  # no 6-person meme: equal pieces of the closest
     assert designer.fallback(six, SPOTS, POSES, "m1")["round"]["pose"]["cuts"] == [0, 0.1667, 0.3333, 0.5, 0.6667, 0.8333, 1]
+    assert designer.fallback([], SPOTS, POSES, "m1")["round"]["keys"] == {}  # an empty group doesn't crash
 
 
 def test_photo_check_needs_one_image():

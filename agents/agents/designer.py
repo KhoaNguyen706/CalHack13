@@ -161,7 +161,7 @@ def template(
     timer_min: int = TIMER_MIN, adjustments: list[Adjustment] | None = None,
 ) -> dict:
     n = len(members)
-    cuts = pose.cuts if pose.people == n else [round(i / n, 4) for i in range(n + 1)]
+    cuts = pose.cuts if pose.people == n or not n else [round(i / n, 4) for i in range(n + 1)]
     holders = random.Random(seed).sample(members, n)  # who holds which piece, left to right
     check = (
         f"Taken at {spot.name}: the background shows {spot.check}. The people in it recreate the pose in the "
